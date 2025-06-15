@@ -41,21 +41,41 @@ local function W()
   pos = b
 end
 
-local function Get()
-  if pos <= #input then
-    local c= input:sub(pos,pos)
-    pos=pos+1
-    return c
-  else
-    coroutine.yield()
+local function Peek()
+  if pos > #input then
+    input = coroutine.yield()
+    pos = 1
+    return Peek()
   end
+  return input:sub(pos,pos)
 end
 
-function TryEnd(name)
+local function Get()
+  local r = Peek()
+  pos=pos+1
+  return r
+end
+
+local function Single(patt, err)
+  local r = Peek():match(patt)
+  if r then pos=pos+1
+  elseif err then error("expected " .. err)
+  end
+  return r
+end
+
+local function Multi(patt)
+  local t
+  repeat
+    local c = Single(patt)
+    if c then if not t then t = {c} else table.insert(t, c) end end
+  until not c
+  if t then return table.concat(t) end
 end
 
 function ParseName()
-    return Find("^[:%a][:%w%-%.]*", "name")
+  return table.concat{Single("[:%a]"),Multi("[:%w%-%.]")}
+  --return Find("^[:%a][:%w%-%.]*", "name")
 end
 
 function ReplaceEntities(s)
@@ -67,27 +87,28 @@ function ReplaceEntities(s)
 end
 
 function ParseElement()
-  Find("^<", "opening tag")
+  Single("<", "opening tag")
   local el = {}
   local name = ParseName()
   local attrs = {}
   el[0] = name
   el.attrs = attrs
   while true do
-    local e = Find("^%s*/?>")
-    if e then
-      if e:sub(-2,-2) ~= "/" then
+    local s = Multi("%s")
+    local sl = Single("/")
+    if not s then
+      Single(">", "closing >")
+      if not sl then
         table.insert(tagstack, el)
       end
       break
     end
-    Find("^%s+", "space")
     local key = ParseName()
     -- We don't handle UTF-8
-    Find("^=", "equals")
-    local quote = Find("^['\"]", "quote")
-    local content = ReplaceEntities(Find("^[^"..quote.."]*"))
-    Find("^"..quote, "ending quote")
+    Single("=", "equals")
+    local quote = Single("['\"]", "quote")
+    local content = ReplaceEntities(Multi("[^"..quote.."]") or "")
+    Single(quote, "ending quote")
     attrs[key] = content
   end
   return el
@@ -131,7 +152,6 @@ local co = coroutine.wrap(function()
 end)
 
 print(require"inspect"(co()))
-print(require"inspect"(co()))
 print(require"inspect"(tagstack))
 
 function OnStdin()
@@ -151,6 +171,28 @@ function OnStdin()
   --GetRandomBytes(20)
 end
 
-function OnReceive(data)
-end
+--function OnReceive(data)
+--  print(data)
+--end
+--Connect("localhost", "localhost", "5222")
+--Send([[<?xml version='1.0'?>
+--<stream:stream
+--  from='admin@localhost'
+--  to='localhost'
+--  version='1.0'
+--  xml:lang='en'
+--  xmlns='jabber:client'
+--  xmlns:stream='http://etherx.jabber.org/streams'>
+--]])
 --EventLoop()
+local lomemo = require"lomemo"
+
+local store = lomemo.SetupStore()
+print(store)
+local ser = store:Serialize()
+print(#ser)
+local store2 = lomemo.DeserializeStore(ser)
+print(store2)
+assert(store2:Serialize() == ser)
+
+print(require"inspect"(store:GetBundle()))
