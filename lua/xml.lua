@@ -188,11 +188,30 @@ end
 local lomemo = require"lomemo"
 
 local store = lomemo.SetupStore()
-print(store)
 local ser = store:Serialize()
-print(#ser)
-local store2 = lomemo.DeserializeStore(ser)
-print(store2)
-assert(store2:Serialize() == ser)
+assert(lomemo.DeserializeStore(ser):Serialize() == ser)
+local store2 = lomemo.SetupStore()
 
-print(require"inspect"(store:GetBundle()))
+local bundle = store:GetBundle()
+print(require"inspect"(bundle))
+local pk = bundle.prekeys[math.random(1,#bundle.prekeys)]
+bundle.pk_id = pk.id
+bundle.pk = pk.pk
+bundle.prekeys = nil
+
+local session2 = assert(lomemo.InitFromBundle(store2, bundle))
+
+ser = session2:Serialize()
+assert(lomemo.DeserializeSession(ser):Serialize() == ser)
+
+local msg = "Hello there!"
+local enc, key, iv = assert(lomemo.EncryptMessage(msg))
+
+local enckey, isprekey = assert(session2:EncryptKey(store2, key))
+
+local session = lomemo.NewSession()
+local deckey = session:DecryptKey(store, isprekey, enckey)
+
+assert(deckey == key)
+assert(lomemo.DecryptMessage(enc, deckey, iv) == msg)
+print("All tests passed")

@@ -12,6 +12,7 @@
 
 struct Session {
   struct omemoSession s;
+  // Wrap so that in Load/Store MessageKey we can callback to Lua
   lua_State *L;
 };
 
@@ -42,27 +43,45 @@ static int SetupStore(lua_State *L) {
   return 1;
 }
 
-static void CopySizedField(lua_State *L, int i, const char *f, int n, uint8_t *d) {
+static void CopySizedField(lua_State *L, int i, const char *f, int n, uint8_t *d, bool hastype) {
   lua_getfield(L, i, f);
   const char *s = luaL_checkstring(L, -1);
-  if (lua_rawlen(L, -1) == n)
-    memcpy(d, s, n);
+  if (lua_rawlen(L, -1) == n+hastype)
+    memcpy(d, s+hastype, n), lua_pop(L, 1);
   else
-    luaL_error(L, "field not right size");
+    lua_pop(L, 1), luaL_error(L, "field not right size");
+}
+
+static int NewSession(lua_State *L) {
+  struct Session *session = lua_newuserdatauv(L, sizeof(struct Session), 0);
+  luaL_setmetatable(L, "omemo.Session");
+  // TODO: is this needed?
+  memset(session, 0, sizeof(struct Session));
+  return 1;
 }
 
 static int InitFromBundle(lua_State *L) {
   struct omemoStore *store = luaL_checkudata(L, 1, "omemo.Store");
   struct Session *session = lua_newuserdatauv(L, sizeof(struct Session), 0);
-  struct omemoBundle bundle = {0};
-#define C(f) CopySizedField(L, 2, #f, sizeof(bundle.f), bundle.f)
-  C(spks);
-  C(spk);
-  C(ik);
-  C(pk);
   luaL_setmetatable(L, "omemo.Session");
-  int r = omemoInitFromBundle((struct omemoSession*)session, store, &bundle);
-  if (r) {
+  struct omemoBundle bundle = {0};
+#define C(ht, f) CopySizedField(L, 2, #f, sizeof(bundle.f), bundle.f, ht)
+  C(0, spks);
+  C(1, spk);
+  C(1, ik);
+  C(1, pk);
+  lua_getfield(L, 2, "spk_id");
+  lua_Integer spk_id = luaL_checkinteger(L, -1);
+  lua_pop(L, 1);
+  if (spk_id < 0 || spk_id > UINT32_MAX) luaL_error(L, "0 <= spk_id <= UINT32_MAX");
+  lua_getfield(L, 2, "pk_id");
+  lua_Integer pk_id = luaL_checkinteger(L, -1);
+  lua_pop(L, 1);
+  if (pk_id < 0 || pk_id > UINT32_MAX) luaL_error(L, "0 <= pk_id <= UINT32_MAX");
+  bundle.pk_id = pk_id;
+  bundle.spk_id = spk_id;
+  int r = omemoInitFromBundle(&session->s, store, &bundle);
+  if (!r) {
     return 1;
   } else {
     lua_pop(L, 1);
@@ -70,6 +89,66 @@ static int InitFromBundle(lua_State *L) {
     lua_pushstring(L, "error");
     return 2;
   }
+}
+
+static int DecryptKey(lua_State *L) {
+  struct Session *session = luaL_checkudata(L, 1, "omemo.Session");
+  struct omemoStore *store = luaL_checkudata(L, 2, "omemo.Store");
+  // TODO: check for nil?
+  bool isprekey = lua_toboolean(L, 3);
+  const char *s = luaL_checkstring(L, 4);
+  size_t n = lua_rawlen(L, 4);
+  omemoKeyPayload deckey;
+  session->L = L;
+  int r = omemoDecryptKey(&session->s, store, deckey, isprekey, s, n);
+  if (!r) {
+    lua_pushlstring(L, deckey, sizeof(deckey));
+    return 1;
+  } else {
+    lua_pushnil(L);
+    lua_pushstring(L, "omemo: decrypt key failed");
+    return 2;
+  }
+}
+
+static int EncryptKey(lua_State *L) {
+  struct Session *session = luaL_checkudata(L, 1, "omemo.Session");
+  struct omemoStore *store = luaL_checkudata(L, 2, "omemo.Store");
+  // TODO: check for nil?
+  const char *s = luaL_checkstring(L, 3);
+  size_t n = lua_rawlen(L, 3);
+  if (n != sizeof(omemoKeyPayload)) luaL_error(L, "key size not right");
+  struct omemoKeyMessage enc;
+  int r = omemoEncryptKey(&session->s, store, &enc, s);
+  if (!r) {
+    lua_pushlstring(L, enc.p, enc.n);
+    lua_pushboolean(L, enc.isprekey);
+    return 2;
+  } else {
+    lua_pushnil(L);
+    lua_pushstring(L, "omemo: decrypt key failed");
+    return 2;
+  }
+}
+
+static int DeserializeSession(lua_State *L) {
+  const char *s = luaL_checkstring(L, 1);
+  size_t n = lua_rawlen(L, 1);
+  struct Session *session = lua_newuserdatauv(L, sizeof(struct Session), 0);
+  if (omemoDeserializeSession(s, n, &session->s))
+    luaL_error(L, "omemo: deserializing protobuf");
+  luaL_setmetatable(L, "omemo.Session");
+  return 1;
+}
+
+static int SerializeSession(lua_State *L) {
+  struct Session *session = luaL_checkudata(L, 1, "omemo.Session");
+  size_t n = omemoGetSerializedSessionSize(&session->s);
+  uint8_t *p = Alloc(L, n);
+  omemoSerializeSession(p, &session->s);
+  lua_pushlstring(L, p, n);
+  free(p);
+  return 1;
 }
 
 static int DeserializeStore(lua_State *L) {
@@ -123,10 +202,58 @@ static int GetBundle(lua_State *L) {
   return 1;
 }
 
+static int EncryptMessage(lua_State *L) {
+  const char *msg = luaL_checkstring(L, 1);
+  uint8_t iv[12];
+  omemoKeyPayload key;
+  size_t msgn = lua_rawlen(L, 1);
+  char *enc = Alloc(L, msgn);
+  int r = omemoEncryptMessage(enc, key, iv, msg, msgn);
+  if (!r) {
+    lua_pushlstring(L, enc, msgn);
+    lua_pushlstring(L, key, sizeof(key));
+    lua_pushlstring(L, iv, sizeof(iv));
+    free(enc);
+    return 3;
+  } else {
+    free(enc);
+    lua_pushnil(L);
+    lua_pushstring(L, "omemo: encrypt message failed");
+    return 2;
+  }
+}
+
+static int DecryptMessage(lua_State *L) {
+  const char *msg = luaL_checkstring(L, 1);
+  const char *key = luaL_checkstring(L, 2);
+  const char *iv = luaL_checkstring(L, 3);
+  size_t msgn = lua_rawlen(L, 1);
+  if (lua_rawlen(L, 2) != sizeof(omemoKeyPayload))
+    luaL_error(L, "omemo: key size");
+  if (lua_rawlen(L, 3) != 12)
+    luaL_error(L, "omemo: iv size");
+  char *dec = Alloc(L, msgn);
+  int r = omemoDecryptMessage(dec, key, sizeof(omemoKeyPayload), iv, msg, msgn);
+  if (!r) {
+    lua_pushlstring(L, dec, msgn);
+    free(dec);
+    return 1;
+  } else {
+    free(dec);
+    lua_pushnil(L);
+    lua_pushstring(L, "omemo: encrypt message failed");
+    return 2;
+  }
+}
+
 static const luaL_Reg lib[] = {
   {"SetupStore", SetupStore},
   {"DeserializeStore", DeserializeStore},
-  {"InitFromBundle", InitFromBundle},
+  {"DeserializeSession", DeserializeSession},
+  {"NewSession", NewSession}, // Use this when receiving first message
+  {"InitFromBundle", InitFromBundle}, // Use this when sending first message
+  {"EncryptMessage", EncryptMessage},
+  {"DecryptMessage", DecryptMessage},
   {NULL,NULL},
 };
 
@@ -137,7 +264,9 @@ static const luaL_Reg storemt[] = {
 };
 
 static const luaL_Reg sessionmt[] = {
-  //{"DecryptKey",DecryptKey},
+  {"DecryptKey",DecryptKey},
+  {"EncryptKey",EncryptKey},
+  {"Serialize",SerializeSession},
   {NULL,NULL},
 };
 
