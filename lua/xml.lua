@@ -208,9 +208,26 @@ local msg = "Hello there!"
 local enc, key, iv = assert(lomemo.EncryptMessage(msg))
 
 local enckey, isprekey = assert(session2:EncryptKey(store2, key))
+enckey, isprekey = assert(session2:EncryptKey(store2, key))
 
 local session = lomemo.NewSession()
-local deckey = session:DecryptKey(store, isprekey, enckey)
+
+local skippedkeys = {}
+
+-- You should use sqlite here, we are using a table for testing. In
+-- sqlite you first create a transaction and commit after DecryptKey()
+-- succeeds
+local sessioncbs = {}
+function sessioncbs:load(dh, nr)
+  -- Return mk if found and nil if not
+  return skippedkeys[dh..nr]
+end
+function sessioncbs:store(dh, nr, mk, n)
+  skippedkeys[dh..nr] = mk
+  return true
+end
+
+local deckey = session:DecryptKey(store, isprekey, enckey, sessioncbs)
 
 assert(deckey == key)
 assert(lomemo.DecryptMessage(enc, deckey, iv) == msg)
