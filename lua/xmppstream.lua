@@ -168,9 +168,16 @@ local function NewParser()
       ParseW()
       Save()
       -- TODO: xml chars
-      while Try"[^<]" do
+      if Try"[^<]" then
+        while Try"[^<]" do
+        end
+        local content = GetSaved()
+        -- TODO: strip whitespace?
+        content = ReplaceEntities(content:gsub(Wpatt.."*$", ""))
+        attrs[#attrs+1] = content
+      else
+        Unsave()
       end
-      local content = GetSaved()
       Expect"<"
       if Try"!" then
         ParseCdata()
@@ -213,6 +220,8 @@ local function NewParser()
       end
       Expect"?" Expect">"
       ParseW()
+      Expect"<"
+      ParseW()
     end
     ExpectS"stream:stream"
     local attrs = ParseAttributes()
@@ -238,6 +247,7 @@ local function NewParser()
 end
 
 local data = [[
+<?xml version='1.0'?>
 <stream:stream
      from='im.example.com'
      id='vgKi/bkYME8OAj4rlXMkpucAqe4='
@@ -267,7 +277,9 @@ p = NewParser()
 for c in data:gmatch"." do
   s = p(c)
   while s do
-    print("Got stanza", s[0])
+    print("Got stanza", require"inspect"(s))
     s = p()
   end
 end
+
+return NewParser

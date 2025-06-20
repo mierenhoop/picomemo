@@ -3,6 +3,7 @@
 #include <sys/poll.h>
 #include <assert.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -50,6 +51,7 @@ static struct {
   mbedtls_ctr_drbg_context ctr_drbg;
   mbedtls_x509_crt cacert;
   mbedtls_ssl_config conf;
+  bool istls;
 } conn;
 
 static void InitializeConn(const char *server, const char *hostname, const char *port) {
@@ -92,12 +94,14 @@ static int CloseConnection(lua_State *L) {
   return 0;
 }
 
-static void Handshake() {
+static int Handshake(lua_State *L) {
   int r;
   while ((r = mbedtls_ssl_handshake(&conn.ssl)) != 0)
     assert(r == MBEDTLS_ERR_SSL_WANT_READ ||
            r == MBEDTLS_ERR_SSL_WANT_WRITE);
   assert(mbedtls_ssl_get_verify_result(&conn.ssl) == 0);
+  conn.istls = true;
+  return 0;
 }
 
 int Connect(lua_State *L) {
@@ -108,27 +112,33 @@ int Connect(lua_State *L) {
   return 0;
 }
 
-int Send(lua_State *L) {
+static int Send(lua_State *L) {
   const char *s = luaL_checkstring(L, 1);
   size_t n = lua_rawlen(L, 1);
   int sent;
-  if (0) // TODO: tls
+  if (conn.istls)
     sent = mbedtls_ssl_write(&conn.ssl, s, n);
   else
     sent = mbedtls_net_send(&conn.server_fd, s, n);
   // TODO: send all
   assert(sent >= 0);
+  return 0;
 }
 
 static uint8_t recvbuf[10000];
 
-static void Receive(lua_State *L) {
+static int Receive(lua_State *L) {
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   // TODO: receive more
-  int n = mbedtls_net_recv(&conn.server_fd, recvbuf, sizeof(recvbuf));
+  int n;
+  if (conn.istls)
+    n = mbedtls_ssl_read(&conn.ssl, recvbuf, sizeof(recvbuf));
+  else
+    n = mbedtls_net_recv(&conn.server_fd, recvbuf, sizeof(recvbuf));
   luaL_addlstring(&b, recvbuf, n);
   luaL_pushresult(&b);
+  return 0;
 }
 
 int EventLoop(lua_State *L) {
@@ -160,6 +170,7 @@ int EventLoop(lua_State *L) {
       }
     }
   }
+  return 0;
 }
 
 int luaopen_native(lua_State *L) {
@@ -168,6 +179,7 @@ int luaopen_native(lua_State *L) {
   lua_register(L, "EventLoop", EventLoop);
   lua_register(L, "Connect", Connect);
   lua_register(L, "Send", Send);
+  lua_register(L, "Handshake", Handshake);
   lua_register(L, "CloseConnection", Connect);
   return 0;
 }
