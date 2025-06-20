@@ -76,7 +76,7 @@ static void CopySizedField(lua_State *L, int i, const char *f, int n, uint8_t *d
   if (lua_rawlen(L, -1) == n+hastype)
     memcpy(d, s+hastype, n), lua_pop(L, 1);
   else
-    lua_pop(L, 1), luaL_error(L, "field not right size");
+    lua_pop(L, 1), luaL_argerror(L, i, "field not right size");
 }
 
 static int NewSession(lua_State *L) {
@@ -100,11 +100,11 @@ static int InitFromBundle(lua_State *L) {
   lua_getfield(L, 2, "spk_id");
   lua_Integer spk_id = luaL_checkinteger(L, -1);
   lua_pop(L, 1);
-  if (spk_id < 0 || spk_id > UINT32_MAX) luaL_error(L, "0 <= spk_id <= UINT32_MAX");
+  if (spk_id < 0 || spk_id > UINT32_MAX) luaL_argerror(L, 2, "0 <= spk_id <= UINT32_MAX");
   lua_getfield(L, 2, "pk_id");
   lua_Integer pk_id = luaL_checkinteger(L, -1);
   lua_pop(L, 1);
-  if (pk_id < 0 || pk_id > UINT32_MAX) luaL_error(L, "0 <= pk_id <= UINT32_MAX");
+  if (pk_id < 0 || pk_id > UINT32_MAX) luaL_argerror(L, 2, "0 <= pk_id <= UINT32_MAX");
   bundle.pk_id = pk_id;
   bundle.spk_id = spk_id;
   int r = omemoInitFromBundle(&session->s, store, &bundle);
@@ -144,7 +144,7 @@ static int EncryptKey(lua_State *L) {
   // TODO: check for nil?
   const char *s = luaL_checkstring(L, 3);
   size_t n = lua_rawlen(L, 3);
-  if (n != sizeof(omemoKeyPayload)) luaL_error(L, "key size not right");
+  if (n != sizeof(omemoKeyPayload)) luaL_argerror(L, 3, "key size not right");
   struct omemoKeyMessage enc;
   int r = omemoEncryptKey(&session->s, store, &enc, s);
   if (!r) {
@@ -256,9 +256,9 @@ static int DecryptMessage(lua_State *L) {
   const char *iv = luaL_checkstring(L, 3);
   size_t msgn = lua_rawlen(L, 1);
   if (lua_rawlen(L, 2) != sizeof(omemoKeyPayload))
-    luaL_error(L, "omemo: key size");
+    luaL_argerror(L, 2, "omemo: key size");
   if (lua_rawlen(L, 3) != 12)
-    luaL_error(L, "omemo: iv size");
+    luaL_argerror(L, 3, "omemo: iv size");
   char *dec = Alloc(L, msgn);
   int r = omemoDecryptMessage(dec, key, sizeof(omemoKeyPayload), iv, msg, msgn);
   if (!r) {
