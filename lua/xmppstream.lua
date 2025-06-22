@@ -146,7 +146,6 @@ local function NewParser()
         Try"[^%]]"
         if Try"%]" and Try"%]" and Try">" then
           -- TODO: right? maybe have argument to GetSaved() for end offset
-          -- also: do gsub with possible escape?
           return GetSaved():sub(1, -3)
         end
       end
