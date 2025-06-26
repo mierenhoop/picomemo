@@ -27,34 +27,54 @@ local function GenerateId()
   return table.concat(t)
 end
 
+local hastls, hassasl = false, false
+local resumeid
+local streamattrs
+local smenabled = false
+local fulljid
+local sentcounter = 0
+local gotcounter = 0
+
+local pending = {}
+--local xeps = {}
+
+--for xmlns, xepfn in pairs(xepfns) do
+--  xeps[xmlns] = xepfn()
+--end
+local nosmcount = { r=1,a=1 }
+
+local function SendStanza(stanza)
+  local buf = {}
+  EncodeXml(stanza, buf)
+  if smenabled then
+    EncodeXml({[0]="r",xmlns="urn:xmpp:sm:3"}, buf)
+  end
+  Send(table.concat(buf))
+  --if smenabled then
+  --  if not nosmcount[stanza[0]] then
+  --    sentcounter=sentcounter+1
+  --  end
+  --end
+  --Flush()
+end
+
 local HandleXmpp = coroutine.wrap(function()
-  local GetStanza = coroutine.yield
+  local function GetStanza()
+    local stanza = coroutine.yield()
+    -- TODO: only if successful
+    if smenabled then
+      if not nosmcount[stanza[0]] then
+        gotcounter = gotcounter + 1
+      end
+    end
+    return stanza
+  end
 
   local function ExpectStanza(tag, ns)
     local stanza = GetStanza()
     -- TODO: right error
     assert(stanza[0] == tag and stanza.xmlns == ns)
     return stanza
-  end
-
-  local hastls, hassasl = false, false
-  local resumeid
-  local streamattrs
-  local smenabled = false
-  local fulljid
-
-  local pending = {}
-  --local xeps = {}
-
-  --for xmlns, xepfn in pairs(xepfns) do
-  --  xeps[xmlns] = xepfn()
-  --end
-  local function SendStanza(stanza)
-    local buf = {}
-    EncodeXml(stanza, buf)
-    Send(table.concat(buf))
-    Flush()
-    -- TODO: stanzacount += 1 for stream acknowledgement
   end
 
 
@@ -122,7 +142,7 @@ local HandleXmpp = coroutine.wrap(function()
 
   HandleHeader()
 
-  Send[[<presence/>]]
+  --SendStanza {[0]="presence"}
 
   --for xmlns, xep in pairs(xeps) do
   --  if xep.Init then
@@ -134,6 +154,9 @@ local HandleXmpp = coroutine.wrap(function()
     local s = GetStanza()
     if s.xmlns == "urn:xmpp:sm:3" then
       if s[0] == "enabled" then assert(not smenabled) smenabled = true end
+      if s[0] == "r" then
+        SendStanza{[0]="a",xmlns="urn:xmpp:sm:3",h=tostring(gotcounter)}
+      end
     end
   end
 
@@ -143,6 +166,16 @@ HandleXmpp()
 
 function OnStdin()
   local msg = io.read("*l")
+  if smenabled then
+    -- We are ready...
+    SendStanza {[0]="message",
+      id=GenerateId(),
+      to="user@localhost",
+      type="chat",
+      ["xml:lang"]="en",
+      {[0]="body", "Hello there!" },
+    }
+  end
   --Send([[<message></message>]])
   --local store = omemo.SetupStore()
 

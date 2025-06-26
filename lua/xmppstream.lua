@@ -144,7 +144,11 @@ local function NewParser()
       while true do
         -- TODO: xml chars
         Try"[^%]]"
-        if Try"%]" and Try"%]" and Try">" then
+        local i=0
+        while Try"%]" do
+          i=i+1
+        end
+        if i >= 2 and Try">" then
           -- TODO: right? maybe have argument to GetSaved() for end offset
           return GetSaved():sub(1, -3)
         end

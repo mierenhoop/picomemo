@@ -121,13 +121,14 @@ static int Send(lua_State *L) {
   else
     sent = mbedtls_net_send(&conn.server_fd, s, n);
   // TODO: send all
-  assert(sent >= 0);
+  if (sent <= 0)
+    luaL_error(L, "sending failed");
   return 0;
 }
 
 static uint8_t recvbuf[10000];
 
-static int Receive(lua_State *L) {
+static bool Receive(lua_State *L) {
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   // TODO: receive more
@@ -136,9 +137,10 @@ static int Receive(lua_State *L) {
     n = mbedtls_ssl_read(&conn.ssl, recvbuf, sizeof(recvbuf));
   else
     n = mbedtls_net_recv(&conn.server_fd, recvbuf, sizeof(recvbuf));
+  if (n < 1) return false;
   luaL_addlstring(&b, recvbuf, n);
   luaL_pushresult(&b);
-  return 0;
+  return true;
 }
 
 int EventLoop(lua_State *L) {
@@ -163,8 +165,10 @@ int EventLoop(lua_State *L) {
     if (fds[1].revents & POLLIN) {
       lua_getglobal(L, "OnReceive");
       if (lua_isfunction(L, -1)) {
-        Receive(L);
-        lua_call(L, 1, 0);
+        if (Receive(L))
+          lua_call(L, 1, 0);
+        else
+          luaL_error(L, "Receive failed");
       } else {
         return luaL_error(L, "OnReceive is not a function");
       }
