@@ -53,7 +53,7 @@ function EncodeXml(t, b)
   table.sort(attrs)
   for i = 1, #attrs do
     p(b," ") p(b,attrs[i]) p(b,"=\"")
-    p(b,Escape(t[attrs[i]])) p(b,"\"")
+    p(b,Escape(tostring(t[attrs[i]]))) p(b,"\"")
   end
   if #t > 0 then
     p(b,">")

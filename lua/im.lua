@@ -3,7 +3,6 @@ require"native"
 require"write"
 
 local xmppstream = require"xmppstream"
-local xep_sm = require"xep-sm"
 
 local function SendStreamHeader()
   Write([[<?xml version="1.0"?><stream:stream]])
@@ -79,7 +78,7 @@ local function NewSession()
   HandleXmpp = coroutine.wrap(function()
     local function GetStanza()
       local stanza = coroutine.yield()
-      print(require"inspect"(stanza))
+      print("Got", require"inspect"(stanza))
       -- TODO: only if successful
       return stanza
     end
@@ -157,7 +156,7 @@ local function NewSession()
       CallHooks("OnGotStanza", st)
     end
 
-    print(require"inspect"(features))
+    print("Feat", require"inspect"(features))
   end)
   session = {
     xep=xep,
@@ -171,13 +170,15 @@ local function NewSession()
       end
     end,
     SendStanza = function(st)
-      print(require"inspect"(st))
+      print("Send", require"inspect"(st))
       EncodeXml(st, sendbuf)
       CallHooks("OnSendStanza", st)
     end,
     Drain = Drain,
+    GenerateId = GenerateId,
   }
-  AddXep("sm", xep_sm)
+  AddXep("sm", require"xep-sm")
+  AddXep("ping", require"xep-ping")
   HandleXmpp()
   return session
 end
@@ -187,9 +188,14 @@ local session = NewSession()
 function OnStdin()
   local msg = io.read("*l")
   if msg == "" then return end
+  if msg == "ping" then
+    session.xep.ping.SendPing(function()
+      print"Got pong"
+    end)
+  end
   if session.IsReady() then
     session.SendStanza {[0]="message",
-      id=GenerateId(),
+      id=session.GenerateId(),
       to="user@localhost",
       type="chat",
       ["xml:lang"]="en",
