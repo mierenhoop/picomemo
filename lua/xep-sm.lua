@@ -1,27 +1,37 @@
--- TODO: should it be possible for the user to disable resumable
+local xmlns = "urn:xmpp:sm:3"
 
-resumable = false
-enabled = false
-streamid = nil
-
--- After negotiation
-function Init()
-  Send[[<enable xmlns="urn:xmpp:sm:3" resume="true"/>]]
-end
-
--- Received stanza with xmlns=current
-function Receive(stanza)
-  if stanza[0] == "enabled" then
-    assert(not enabled)
-    enabled = true
-    resumable = stanza.resume == "true" or stanza.resume == "1"
-  elseif stanza[0] == "resumed" then
-
-  else
-    error"unexpected stanza"
-  end
-end
-
-function Resume()
-
+return function(session)
+  local sentenable
+  local enabled
+  local sent, received = 0, 0
+  return {
+    OnFeatures = function(features)
+      for _, feat in ipairs(features) do
+        if type(feat) == "table" and feat[0] == "sm" and feat.xmlns == xmlns then
+          session.SendStanza{[0]="enable",xmlns=xmlns,resume="true"}
+          sentenable = true
+          break
+        end
+      end
+    end,
+    OnDrain = function()
+      if enabled then session.SendStanza{[0]="r",xmlns=xmlns} end
+    end,
+    -- TODO: hook on xmlns
+    OnGotStanza = function(st)
+      if st.xmlns ~= xmlns then
+        received=received+1
+        return
+      end
+      if enabled and st[0] == "r" then
+        session.SendStanza{[0]="a",xmlns=xmlns,h=sent}
+      elseif sentenable and st[0] == "enabled" then
+        enabled = true
+      end
+    end,
+    OnSendStanza = function(st)
+      if not enabled or st.xmlns == xmlns then return end
+      sent=sent+1
+    end,
+  }
 end

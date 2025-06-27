@@ -3,11 +3,7 @@ require"native"
 require"write"
 
 local xmppstream = require"xmppstream"
-local stream
-
---local xepfns = {
---  ["eu.siacs.conversations.axolotl"] = require"xep-omemo",
---}
+local xep_sm = require"xep-sm"
 
 local function SendStreamHeader()
   Write([[<?xml version="1.0"?><stream:stream]])
@@ -27,154 +23,179 @@ local function GenerateId()
   return table.concat(t)
 end
 
-local hastls, hassasl = false, false
-local resumeid
-local streamattrs
-local smenabled = false
-local fulljid
-local sentcounter = 0
-local gotcounter = 0
+local function NewSession()
+  local session
+  local stream
+  local hastls, hassasl = false, false
+  local isready
+  local resumeid
+  local streamattrs
+  local fulljid
+  local pending = {}
+  local xep = {}
+  local xeplist = {}
+  local sendbuf = {}
 
-local pending = {}
---local xeps = {}
-
---for xmlns, xepfn in pairs(xepfns) do
---  xeps[xmlns] = xepfn()
---end
-local nosmcount = { r=1,a=1 }
-
-local function SendStanza(stanza)
-  local buf = {}
-  EncodeXml(stanza, buf)
-  if smenabled then
-    EncodeXml({[0]="r",xmlns="urn:xmpp:sm:3"}, buf)
+  local function AddXep(name, fn)
+    local t = fn(session)
+    assert(type(t) == "table")
+    xeplist[#xeplist+1] = t
+    xep[name] = t
   end
-  Send(table.concat(buf))
-  --if smenabled then
-  --  if not nosmcount[stanza[0]] then
-  --    sentcounter=sentcounter+1
-  --  end
-  --end
-  --Flush()
-end
 
-local HandleXmpp = coroutine.wrap(function()
-  local function GetStanza()
-    local stanza = coroutine.yield()
-    -- TODO: only if successful
-    if smenabled then
-      if not nosmcount[stanza[0]] then
-        gotcounter = gotcounter + 1
+  local Drain
+
+  local inhook = {}
+  local function CallHooks(fname, ...)
+    -- prevent nested in same hook
+    if inhook[fname] then return end
+    inhook[fname] = true
+    for _, x in ipairs(xeplist) do
+      -- TODO: pcall
+      -- TODO: iterate only over those that implement it
+      if x[fname] then
+        x[fname](...)
       end
     end
-    return stanza
+    Drain()
+    inhook[fname] = false
   end
 
-  local function ExpectStanza(tag, ns)
-    local stanza = GetStanza()
-    -- TODO: right error
-    assert(stanza[0] == tag and stanza.xmlns == ns)
-    return stanza
+  Drain = function()
+    if #sendbuf > 0 then
+      CallHooks("OnDrain")
+    end
+    if #sendbuf > 0 then
+      Send(table.concat(sendbuf))
+      sendbuf = {}
+    end
   end
 
+  local function SendStanza(stanza)
+    EncodeXml(stanza, sendbuf)
+    Drain()
+  end
 
-  local function HandleHeader()
-    streamattrs = ExpectStanza("stream:stream", "jabber:client")
-    local features = ExpectStanza("stream:features", nil)
+  HandleXmpp = coroutine.wrap(function()
+    local function GetStanza()
+      local stanza = coroutine.yield()
+      print(require"inspect"(stanza))
+      -- TODO: only if successful
+      return stanza
+    end
 
-    local function HasFeature(tag, ns)
-      for _, feature in ipairs(features) do
-        -- TODO: better error
-        assert(type(feature) == "table")
-        if feature[0] == tag and feature.xmlns == ns then
-          return feature
+    local function ExpectStanza(tag, ns)
+      local stanza = GetStanza()
+      -- TODO: right error
+      assert(stanza[0] == tag and stanza.xmlns == ns)
+      return stanza
+    end
+
+
+    local function HandleHeader()
+      streamattrs = ExpectStanza("stream:stream", "jabber:client")
+      local features = ExpectStanza("stream:features", nil)
+
+      local function HasFeature(tag, ns)
+        for _, feature in ipairs(features) do
+          -- TODO: better error
+          assert(type(feature) == "table")
+          if feature[0] == tag and feature.xmlns == ns then
+            return feature
+          end
         end
       end
-    end
 
-    if not hastls and HasFeature("starttls", "urn:ietf:params:xml:ns:xmpp-tls") then
-      SendStanza {[0]="starttls",
-        xmlns="urn:ietf:params:xml:ns:xmpp-tls",
-      }
-      ExpectStanza("proceed", "urn:ietf:params:xml:ns:xmpp-tls")
-      Handshake()
-      stream = xmppstream()
-      SendStreamHeader()
-      hastls = true
-      return HandleHeader()
-    end
-
-    local mechs = HasFeature("mechanisms", "urn:ietf:params:xml:ns:xmpp-sasl")
-    if not hassasl and mechs then
-      for _, mech in ipairs(mechs) do
-        assert(mech[0] == "mechanism" and #mech == 1)
-        -- TODO: select best fitting mech
+      if not hastls and HasFeature("starttls", "urn:ietf:params:xml:ns:xmpp-tls") then
+        SendStanza {[0]="starttls",
+          xmlns="urn:ietf:params:xml:ns:xmpp-tls",
+        }
+        ExpectStanza("proceed", "urn:ietf:params:xml:ns:xmpp-tls")
+        Handshake()
+        stream = xmppstream()
+        SendStreamHeader()
+        hastls = true
+        return HandleHeader()
       end
-      SendStanza{[0]="auth",
-        xmlns="urn:ietf:params:xml:ns:xmpp-sasl",
-        mechanism="PLAIN",
-        EncodeBase64("\0admin\0adminpass"),
-      }
-      ExpectStanza("success", "urn:ietf:params:xml:ns:xmpp-sasl")
-      stream = xmppstream()
-      SendStreamHeader()
-      hassasl = true
-      return HandleHeader()
-    end
 
-    if HasFeature("bind", "urn:ietf:params:xml:ns:xmpp-bind") then
-      local id = GenerateId()
-      SendStanza {[0]="iq", id=id, type="set",
-        {[0]="bind",xmlns="urn:ietf:params:xml:ns:xmpp-bind"}
-      }
-      local bindres = ExpectStanza("iq", nil)
-      assert(#bindres == 1 and bindres[1][0] == "bind" and bindres[1].xmlns == "urn:ietf:params:xml:ns:xmpp-bind")
-      assert(bindres.id == id)
-      fulljid = bindres[1][1]
-    end
-
-    if HasFeature("sm", "urn:xmpp:sm:3") then
-      SendStanza {[0]="enable",xmlns="urn:xmpp:sm:3",resume="true" }
-      --local enabled = ExpectStanza("enabled", "urn:xmpp:sm:3")
-      --resumeid = assert(enabled.id)
-    end
-  end
-
-  HandleHeader()
-
-  --SendStanza {[0]="presence"}
-
-  --for xmlns, xep in pairs(xeps) do
-  --  if xep.Init then
-  --    xep:Init()
-  --  end
-  --end
-
-  while true do
-    local s = GetStanza()
-    if s.xmlns == "urn:xmpp:sm:3" then
-      if s[0] == "enabled" then assert(not smenabled) smenabled = true end
-      if s[0] == "r" then
-        SendStanza{[0]="a",xmlns="urn:xmpp:sm:3",h=tostring(gotcounter)}
+      local mechs = HasFeature("mechanisms", "urn:ietf:params:xml:ns:xmpp-sasl")
+      if not hassasl and mechs then
+        for _, mech in ipairs(mechs) do
+          assert(mech[0] == "mechanism" and #mech == 1)
+          -- TODO: select best fitting mech
+        end
+        SendStanza{[0]="auth",
+          xmlns="urn:ietf:params:xml:ns:xmpp-sasl",
+          mechanism="PLAIN",
+          EncodeBase64("\0admin\0adminpass"),
+        }
+        ExpectStanza("success", "urn:ietf:params:xml:ns:xmpp-sasl")
+        stream = xmppstream()
+        SendStreamHeader()
+        hassasl = true
+        return HandleHeader()
       end
-    end
-  end
 
-  --print(require"inspect"(features))
-end)
-HandleXmpp()
+      if HasFeature("bind", "urn:ietf:params:xml:ns:xmpp-bind") then
+        local id = GenerateId()
+        SendStanza {[0]="iq", id=id, type="set",
+          {[0]="bind",xmlns="urn:ietf:params:xml:ns:xmpp-bind"}
+        }
+        local bindres = ExpectStanza("iq", nil)
+        assert(#bindres == 1 and bindres[1][0] == "bind" and bindres[1].xmlns == "urn:ietf:params:xml:ns:xmpp-bind")
+        assert(bindres.id == id)
+        fulljid = bindres[1][1]
+      end
+      CallHooks("OnFeatures", features)
+    end
+
+    HandleHeader()
+    isready = true
+
+    while true do
+      local st = GetStanza()
+      CallHooks("OnGotStanza", st)
+    end
+
+    print(require"inspect"(features))
+  end)
+  session = {
+    xep=xep,
+    IsReady = function() return isready end,
+    FeedStream = function(data)
+      if not stream then stream = xmppstream() end
+      local s = stream(data)
+      while s do
+        HandleXmpp(s)
+        s = stream()
+      end
+    end,
+    SendStanza = function(st)
+      print(require"inspect"(st))
+      EncodeXml(st, sendbuf)
+      CallHooks("OnSendStanza", st)
+    end,
+    Drain = Drain,
+  }
+  AddXep("sm", xep_sm)
+  HandleXmpp()
+  return session
+end
+
+local session = NewSession()
 
 function OnStdin()
   local msg = io.read("*l")
-  if smenabled then
-    -- We are ready...
-    SendStanza {[0]="message",
+  if msg == "" then return end
+  if session.IsReady() then
+    session.SendStanza {[0]="message",
       id=GenerateId(),
       to="user@localhost",
       type="chat",
       ["xml:lang"]="en",
-      {[0]="body", "Hello there!" },
+      {[0]="body", msg },
     }
+    session.Drain()
   end
   --Send([[<message></message>]])
   --local store = omemo.SetupStore()
@@ -194,12 +215,7 @@ end
 
 function OnReceive(data)
   print(data)
-  if not stream then stream = xmppstream() end
-  local s = stream(data)
-  while s do
-    HandleXmpp(s)
-    s = stream()
-  end
+  session.FeedStream(data)
 end
 
 Connect("localhost", "localhost", "5222")
