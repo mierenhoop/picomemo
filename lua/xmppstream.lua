@@ -102,8 +102,8 @@ local function NewParser()
 
   local function ParseName()
     Save()
-    Expect("[:%a]", "element name")
-    repeat until not Try("[:%w%-%.]")
+    Expect("[:_%a]", "element name")
+    repeat until not Try("[:_%w%-%.]")
     return GetSaved()
   end
 

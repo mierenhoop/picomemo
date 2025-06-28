@@ -22,6 +22,7 @@ return function(session)
       end
     end,
     -- TODO: hook on xmlns
+    -- TODO: do something with <a/>
     OnGotStanza = function(st)
       if st.xmlns ~= xmlns then
         received=received+1

@@ -25,24 +25,22 @@ end
 local function NewSession()
   local session
   local stream
-  local hastls, hassasl = false, false
+  local hastls, hassasl
   local isready
   local resumeid
   local streamattrs
   local fulljid
   local pending = {}
-  local xep = {}
   local xeplist = {}
   local sendbuf = {}
+  local skipdrain
 
-  local function AddXep(name, fn)
-    local t = fn(session)
+  local function AddXep(name)
+    local t = require(name)(session)
     assert(type(t) == "table")
     xeplist[#xeplist+1] = t
-    xep[name] = t
+    session[name] = t
   end
-
-  local Drain
 
   local inhook = {}
   local function CallHooks(fname, ...)
@@ -53,14 +51,15 @@ local function NewSession()
       -- TODO: pcall
       -- TODO: iterate only over those that implement it
       if x[fname] then
+        skipdrain = true
         x[fname](...)
+        skipdrain = false
       end
     end
-    Drain()
     inhook[fname] = false
   end
 
-  Drain = function()
+  local function Drain()
     if #sendbuf > 0 then
       CallHooks("OnDrain")
     end
@@ -72,11 +71,11 @@ local function NewSession()
 
   local function SendStanza(stanza)
     EncodeXml(stanza, sendbuf)
-    Drain()
   end
 
   HandleXmpp = coroutine.wrap(function()
     local function GetStanza()
+      Drain()
       local stanza = coroutine.yield()
       print("Got", require"inspect"(stanza))
       -- TODO: only if successful
@@ -89,7 +88,6 @@ local function NewSession()
       assert(stanza[0] == tag and stanza.xmlns == ns)
       return stanza
     end
-
 
     local function HandleHeader()
       streamattrs = ExpectStanza("stream:stream", "jabber:client")
@@ -150,6 +148,7 @@ local function NewSession()
 
     HandleHeader()
     isready = true
+    SendStanza {[0]="presence"}
 
     while true do
       local st = GetStanza()
@@ -159,7 +158,6 @@ local function NewSession()
     print("Feat", require"inspect"(features))
   end)
   session = {
-    xep=xep,
     IsReady = function() return isready end,
     FeedStream = function(data)
       if not stream then stream = xmppstream() end
@@ -173,12 +171,15 @@ local function NewSession()
       print("Send", require"inspect"(st))
       EncodeXml(st, sendbuf)
       CallHooks("OnSendStanza", st)
+      -- Only Drain when this SendStanza call is not called by a hook
+      if not skipdrain then Drain() end
     end,
     Drain = Drain,
     GenerateId = GenerateId,
   }
-  AddXep("sm", require"xep-sm")
-  AddXep("ping", require"xep-ping")
+  AddXep("xep_sm")
+  AddXep("xep_ping")
+  AddXep("xep_omemo")
   HandleXmpp()
   return session
 end
@@ -189,9 +190,10 @@ function OnStdin()
   local msg = io.read("*l")
   if msg == "" then return end
   if msg == "ping" then
-    session.xep.ping.SendPing(function()
+    session.xep_ping.SendPing(function()
       print"Got pong"
     end)
+    return
   end
   if session.IsReady() then
     session.SendStanza {[0]="message",
@@ -201,7 +203,6 @@ function OnStdin()
       ["xml:lang"]="en",
       {[0]="body", msg },
     }
-    session.Drain()
   end
   --Send([[<message></message>]])
   --local store = omemo.SetupStore()

@@ -39,14 +39,14 @@ function EncodeXml(t, b)
   end
   local name = t[0]
   assert(type(name) == "string")
-  assert(name:match"^[:%a][:%w%-%.]*$")
+  assert(name:match"^[:_%a][:_%w%-%.]*$")
   p(b,"<") p(b,name)
   local attrs = {}
   -- sort
   for k in pairs(t) do
     if type(k) ~= "number" then
       assert(type(k) == "string")
-      assert(k:match"^[:%a][:%w%-%.]*$")
+      assert(k:match"^[:_%a][:_%w%-%.]*$")
       attrs[#attrs+1] = k
     end
   end
