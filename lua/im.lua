@@ -1,6 +1,7 @@
 #!/usr/bin/env lua5.4
 require"native"
 require"write"
+local NewDatabase = require"db"
 
 local xmppstream = require"xmppstream"
 
@@ -183,12 +184,12 @@ local function NewSession(opts)
         fulljid = bindres[1][1]
         -- TODO: check if fulljid == opts.*part
       end
+      isready = true
       CallHooks("OnFeatures", features)
     end
 
     SendStreamHeader()
     HandleHeader()
-    isready = true
     SendStanza {[0]="presence",
       id=GenerateId(),
       {[0]="show", "away" },
@@ -201,6 +202,7 @@ local function NewSession(opts)
   end)
   session = {
     opts = opts,
+    db = NewDatabase(":memory:"),
     IsReady = function() return isready end,
     FeedStream = function(data)
       if not stream then stream = xmppstream() end
@@ -211,6 +213,7 @@ local function NewSession(opts)
       end
     end,
     SendStanza = function(st)
+      assert(isready)
       SendStanza(st)
       CallHooks("OnSendStanza", st)
       -- Only Drain when this SendStanza call is not called by a hook
