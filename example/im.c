@@ -803,7 +803,7 @@ void RunIm(const char *ip) {
   LoadStore();
   assert(omemostore.isinitialized);
   memset(&omemosession, 0, sizeof(omemosession));
-  LoadSession();
+  //LoadSession();
   Loop();
   exit(0);
 }
