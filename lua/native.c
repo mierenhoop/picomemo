@@ -150,9 +150,7 @@ int EventLoop(lua_State *L) {
     fds[0].events = POLLIN;
     fds[1].fd = conn.server_fd.fd;
     fds[1].events = POLLIN;
-    puts("POLLING");
     int r = poll(fds, 2, -1);
-    puts("GOT");
     if (fds[0].revents & POLLIN) {
       lua_getglobal(L, "OnStdin");
       if (lua_isfunction(L, -1)) {

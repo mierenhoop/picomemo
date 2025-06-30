@@ -4,15 +4,6 @@ require"write"
 
 local xmppstream = require"xmppstream"
 
-local function SendStreamHeader()
-  Write([[<?xml version="1.0"?><stream:stream]])
-  Write([[ version="1.0" xml:lang="en" xmlns="jabber:client"]])
-  Write([[ from="%s"]], "admin@localhost")
-  Write([[ to="%s"]], "localhost")
-  Write([[ xmlns:stream="http://etherx.jabber.org/streams">]])
-  Flush()
-end
-
 local function GenerateId()
   -- TODO: maybe use something else
   local t = {}
@@ -22,7 +13,13 @@ local function GenerateId()
   return table.concat(t)
 end
 
-local function NewSession()
+local function LogStanza(st, dir)
+  local buf = {}
+  EncodeXml(st, buf, dir.."| ")
+  io.write(table.concat(buf))
+end
+
+local function NewSession(opts)
   local session
   local stream
   local hastls, hassasl
@@ -70,14 +67,34 @@ local function NewSession()
   end
 
   local function SendStanza(stanza)
+    io.write("\x1b[32m")
+    LogStanza(stanza, ">")
+    print("\x1b[0m")
     EncodeXml(stanza, sendbuf)
+  end
+
+  local function SendStreamHeader()
+    table.insert(sendbuf, "<?xml version=\"1.0\"?>")
+    EncodeXml({[0]="stream:stream",
+      version = "1.0",
+      ["xml:lang"] = "en",
+      xmlns = "jabber:client",
+      -- TODO: from?
+      to = opts.domainpart,
+      ["xmlns:stream"] = "http://etherx.jabber.org/streams",
+    }, sendbuf)
+    -- HACK
+    assert(sendbuf[#sendbuf] == "/>")
+    sendbuf[#sendbuf] = ">"
   end
 
   HandleXmpp = coroutine.wrap(function()
     local function GetStanza()
       Drain()
       local stanza = coroutine.yield()
-      print("Got", require"inspect"(stanza))
+      io.write("\x1b[34m")
+      LogStanza(stanza, "<")
+      print("\x1b[0m")
       -- TODO: only if successful
       return stanza
     end
@@ -87,6 +104,13 @@ local function NewSession()
       -- TODO: right error
       assert(stanza[0] == tag and stanza.xmlns == ns)
       return stanza
+    end
+
+    local function Close()
+      -- TODO: only send once, while not calling the hooks as we don't
+      -- want <r/> after stream closing, maybe have isclosed variable
+      Drain()
+      Send("</stream:stream>")
     end
 
     local function HandleHeader()
@@ -103,7 +127,8 @@ local function NewSession()
         end
       end
 
-      if not hastls and HasFeature("starttls", "urn:ietf:params:xml:ns:xmpp-tls") then
+      if opts.usetls and not hastls then
+        assert(HasFeature("starttls", "urn:ietf:params:xml:ns:xmpp-tls"))
         SendStanza {[0]="starttls",
           xmlns="urn:ietf:params:xml:ns:xmpp-tls",
         }
@@ -116,17 +141,29 @@ local function NewSession()
       end
 
       local mechs = HasFeature("mechanisms", "urn:ietf:params:xml:ns:xmpp-sasl")
-      if not hassasl and mechs then
+      if opts.saslmech and not hassasl then
+        assert(mechs)
+        assert(opts.password)
+        local hasmech
         for _, mech in ipairs(mechs) do
           assert(mech[0] == "mechanism" and #mech == 1)
-          -- TODO: select best fitting mech
+          -- TODO: what if spaces around XML content?
+          if mech[1] == opts.saslmech then hasmech = true break end
         end
-        SendStanza{[0]="auth",
-          xmlns="urn:ietf:params:xml:ns:xmpp-sasl",
-          mechanism="PLAIN",
-          EncodeBase64("\0admin\0adminpass"),
-        }
-        ExpectStanza("success", "urn:ietf:params:xml:ns:xmpp-sasl")
+        assert(hasmech)
+        if opts.saslmech == "PLAIN" then
+          -- TODO: saslprep
+          local auth = "\0"..opts.localpart.."\0"..opts.password
+          SendStanza{[0]="auth",
+            xmlns="urn:ietf:params:xml:ns:xmpp-sasl",
+            mechanism="PLAIN",
+            EncodeBase64(auth),
+          }
+          ExpectStanza("success", "urn:ietf:params:xml:ns:xmpp-sasl")
+        else
+          -- TODO: SCRAM-SHA
+          assert(false)
+        end
         stream = xmppstream()
         SendStreamHeader()
         hassasl = true
@@ -136,28 +173,34 @@ local function NewSession()
       if HasFeature("bind", "urn:ietf:params:xml:ns:xmpp-bind") then
         local id = GenerateId()
         SendStanza {[0]="iq", id=id, type="set",
-          {[0]="bind",xmlns="urn:ietf:params:xml:ns:xmpp-bind"}
+          {[0]="bind",xmlns="urn:ietf:params:xml:ns:xmpp-bind",
+            {[0]="resource", opts.resourcepart},
+          }
         }
         local bindres = ExpectStanza("iq", nil)
         assert(#bindres == 1 and bindres[1][0] == "bind" and bindres[1].xmlns == "urn:ietf:params:xml:ns:xmpp-bind")
         assert(bindres.id == id)
         fulljid = bindres[1][1]
+        -- TODO: check if fulljid == opts.*part
       end
       CallHooks("OnFeatures", features)
     end
 
+    SendStreamHeader()
     HandleHeader()
     isready = true
-    SendStanza {[0]="presence"}
+    SendStanza {[0]="presence",
+      id=GenerateId(),
+      {[0]="show", "away" },
+    }
 
     while true do
       local st = GetStanza()
       CallHooks("OnGotStanza", st)
     end
-
-    print("Feat", require"inspect"(features))
   end)
   session = {
+    opts = opts,
     IsReady = function() return isready end,
     FeedStream = function(data)
       if not stream then stream = xmppstream() end
@@ -168,8 +211,7 @@ local function NewSession()
       end
     end,
     SendStanza = function(st)
-      print("Send", require"inspect"(st))
-      EncodeXml(st, sendbuf)
+      SendStanza(st)
       CallHooks("OnSendStanza", st)
       -- Only Drain when this SendStanza call is not called by a hook
       if not skipdrain then Drain() end
@@ -184,7 +226,15 @@ local function NewSession()
   return session
 end
 
-local session = NewSession()
+Connect("localhost", "localhost", "5222")
+local session = NewSession({
+  localpart = "admin",
+  domainpart = "localhost",
+  resourcepart = "testres",
+  usetls = true,
+  saslmech = "PLAIN",
+  password = "adminpass",
+})
 
 function OnStdin()
   local msg = io.read("*l")
@@ -221,11 +271,8 @@ function OnStdin()
 end
 
 function OnReceive(data)
-  print(data)
   session.FeedStream(data)
 end
 
-Connect("localhost", "localhost", "5222")
-SendStreamHeader()
 EventLoop()
 --

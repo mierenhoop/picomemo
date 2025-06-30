@@ -249,40 +249,4 @@ local function NewParser()
   return r
 end
 
-local data = [[
-<?xml version='1.0'?>
-<stream:stream
-     from='im.example.com'
-     id='vgKi/bkYME8OAj4rlXMkpucAqe4='
-     to='juliet@im.example.com'
-     version='1.0'
-     xml:lang='en'
-     xmlns='jabber:client'
-     xmlns:stream='http://etherx.jabber.org/streams'>
-<stream:features>
-     <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
-       <mechanism>EXTERNAL</mechanism>
-       <mechanism>SCRAM-SHA-1-PLUS</mechanism>
-       <mechanism>SCRAM-SHA-1</mechanism>
-       <mechanism>PLAIN</mechanism>
-     </mechanisms>
-</stream:features>
-]]
-
-local p = NewParser()
-local s = p(data)
-while s do
-  print("Got stanza", s[0])
-  s = p()
-end
-
-p = NewParser()
-for c in data:gmatch"." do
-  s = p(c)
-  while s do
-    print("Got stanza", require"inspect"(s))
-    s = p()
-  end
-end
-
 return NewParser

@@ -32,14 +32,20 @@ end
 
 local p = table.insert
 
-function EncodeXml(t, b)
+function EncodeXml(t, b, indent)
   if type(t) ~= "table" then
-    p(b,Escape(tostring(t)))
+    local esc = Escape(tostring(t))
+    if indent then
+      p(b,indent)
+      esc = esc:gsub("\n", "\n"..indent).."\n"
+    end
+    p(b,esc)
     return
   end
   local name = t[0]
   assert(type(name) == "string")
   assert(name:match"^[:_%a][:_%w%-%.]*$")
+  if indent then p(b,indent) end
   p(b,"<") p(b,name)
   local attrs = {}
   -- sort
@@ -57,21 +63,18 @@ function EncodeXml(t, b)
   end
   if #t > 0 then
     p(b,">")
-    for i = 1, #t do
-      EncodeXml(t[i], b)
+    local in2
+    if indent then
+      in2 = indent.."  "
+      p(b,"\n")
     end
+    for i = 1, #t do
+      EncodeXml(t[i], b, in2)
+    end
+    if indent then p(b,indent) end
     p(b,"</") p(b,name) p(b,">")
   else
     p(b,"/>")
   end
+  if indent then p(b,"\n") end
 end
-
-local b = {}
-EncodeXml({ [0]="iq",
-  id = "randomid",
-  type = "get",
-  {[0]="bind", xmlns="bind:'<>",
-    {[0]="jid", "admin@localhost/resource" }
-  },
-}, b)
-print(table.concat(b))

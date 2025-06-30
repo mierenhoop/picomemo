@@ -18,10 +18,10 @@ return function(session)
         {[0]="field", value},
       }
     end
-    local id = HookPendingId(function() end)
+    local id = session.GenerateId()
     local stanza = {[0]="iq",
       type = "set",
-      id = "randomid",
+      id = id,
       {[0]="pubsub",
         {[0]="publish",
           node = xmlns..".bundles:" .. deviceid,
@@ -50,6 +50,7 @@ return function(session)
         },
       },
     }
+    session.SendStanza(stanza)
   end
   return {
     OnFeatures = function(features)
@@ -61,6 +62,8 @@ return function(session)
         },
       }
       --AnnounceBundle()
+    end,
+    Enable = function()
     end,
   }
 end
