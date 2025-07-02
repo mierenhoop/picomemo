@@ -30,6 +30,7 @@ local function NewSession(opts)
   local xeplist = {}
   local sendbuf = {}
   local skipdrain
+  local barejid = opts.localpart.."@"..opts.domainpart
 
   local function AddXep(name)
     local t = require(name)(session)
@@ -40,6 +41,7 @@ local function NewSession(opts)
 
   local inhook = {}
   local function CallHooks(fname, ...)
+    local save = skipdrain
     -- prevent nested in same hook
     if inhook[fname] then return end
     inhook[fname] = true
@@ -49,7 +51,7 @@ local function NewSession(opts)
       if x[fname] then
         skipdrain = true
         x[fname](...)
-        skipdrain = false
+        if not save then skipdrain = false end
       end
     end
     inhook[fname] = false
@@ -60,6 +62,7 @@ local function NewSession(opts)
       CallHooks("OnDrain")
     end
     if #sendbuf > 0 then
+      print"drain"
       Send(table.concat(sendbuf))
       sendbuf = {}
     end
@@ -179,7 +182,7 @@ local function NewSession(opts)
         local bindres = ExpectStanza("iq", nil)
         assert(#bindres == 1 and bindres[1][0] == "bind" and bindres[1].xmlns == "urn:ietf:params:xml:ns:xmpp-bind")
         assert(bindres.id == id)
-        fulljid = bindres[1][1]
+        fulljid = bindres[1][1][1]
         -- TODO: check if fulljid == opts.*part
       end
       isready = true
@@ -213,12 +216,15 @@ local function NewSession(opts)
     SendStanza = function(st)
       assert(isready)
       SendStanza(st)
+      local save = skipdrain
       CallHooks("OnSendStanza", st)
       -- Only Drain when this SendStanza call is not called by a hook
-      if not skipdrain then Drain() end
+      if not save then Drain() end
     end,
     Drain = Drain,
     GenerateId = GenerateId,
+    GetFullJid = function() assert(isready) return fulljid end,
+    GetBareJid = function() return barejid end,
   }
   AddXep("xep_sm")
   AddXep("xep_ping")
