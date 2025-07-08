@@ -31,6 +31,7 @@ local function NewSession(opts)
   local sendbuf = {}
   local skipdrain
   local barejid = opts.localpart.."@"..opts.domainpart
+  local idhooks = {}
 
   local function AddXep(name)
     local t = require(name)(session)
@@ -88,6 +89,15 @@ local function NewSession(opts)
     -- HACK
     assert(sendbuf[#sendbuf] == "/>")
     sendbuf[#sendbuf] = ">"
+  end
+
+  -- TODO: only allow iq, message and presence don't return anything,
+  -- except errors. Messages should be stored in database along with id
+  -- so it can later be associated with the error
+  local function HookId(fn)
+    local id = GenerateId()
+    idhooks[id] = fn or function() end
+    return id
   end
 
   HandleXmpp = coroutine.wrap(function()
@@ -199,6 +209,10 @@ local function NewSession(opts)
     while true do
       local st = GetStanza()
       CallHooks("OnGotStanza", st)
+      if st.id and idhooks[st.id] then
+        idhooks[st.id](st)
+        idhooks[st.id] = nil
+      end
     end
   end)
   session = {
@@ -223,6 +237,7 @@ local function NewSession(opts)
     end,
     Drain = Drain,
     GenerateId = GenerateId,
+    HookId = HookId,
     GetFullJid = function() assert(isready) return fulljid end,
     GetBareJid = function() return barejid end,
   }

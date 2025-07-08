@@ -102,8 +102,9 @@ local function NewParser()
 
   local function ParseName()
     Save()
-    Expect("[:_%a]", "element name")
-    repeat until not Try("[:_%w%-%.]")
+    -- TODO: verify UTF-8
+    Expect("[:_%a\x80-\xff]", "element name")
+    repeat until not Try("[:_%w%-%.\x80-\xff]")
     return GetSaved()
   end
 
@@ -183,15 +184,17 @@ local function NewParser()
       end
       Expect"<"
       if Try"!" then
-        ParseCdata()
+        -- TODO: merge CDATA with other content in same slot
+        attrs[#attrs+1] = ParseCdata()
+      else
+        if Try"/" then
+          if ParseName() ~= name then Error("same closing tag as opening tag") end
+          ParseW()
+          Expect">"
+          break
+        end
+        attrs[#attrs+1] = ParseElement()
       end
-      if Try"/" then
-        if ParseName() ~= name then Error("same closing tag as opening tag") end
-        ParseW()
-        Expect">"
-        break
-      end
-      attrs[#attrs+1] = ParseElement()
     end
     return attrs
   end

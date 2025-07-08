@@ -50,8 +50,7 @@ return function(session)
   ---@type {[string]: {[integer]: lomemo.Session}}
   local sessions = {}
 
-  local function PublishStanza(node, item)
-    local id = session.GenerateId()
+  local function MakePublishStanza(id, node, item)
     return {[0]="iq",
       --from=session.GetFullJid(),
       id=id,
@@ -63,7 +62,7 @@ return function(session)
           item,
         },
       },
-    }, id
+    }
   end
 
   local deviceid = 7
@@ -181,7 +180,10 @@ return function(session)
         end
         if not found then
           list[#list+1] = {[0]="device", id=tostring(deviceid)}
-          local st, id = PublishStanza(xmlns..".devicelist", {
+          local id = HookId(function(st2)
+            -- TODO: check if success
+          end)
+          local st = MakePublishStanza(id, xmlns..".devicelist", {
             [0]="item",
             id="current",
             list,
