@@ -100,12 +100,15 @@ local function NewParser()
     ParseW()
   end
 
+  -- Returns XML Name as string or nil
   local function ParseName()
     Save()
     -- TODO: verify UTF-8
-    Expect("[:_%a\x80-\xff]", "element name")
-    repeat until not Try("[:_%w%-%.\x80-\xff]")
-    return GetSaved()
+    if Try("[:_%a\x80-\xff]") then
+      repeat until not Try("[:_%w%-%.\x80-\xff]")
+      return GetSaved()
+    end
+    Unsave()
   end
 
   local function ReplaceEntities(s)
@@ -132,6 +135,7 @@ local function NewParser()
     local attrs = {}
     while TryW() do
       local key = ParseName()
+      if not key then break end
       Expect"="
       local val = ParseAttributeValue()
       attrs[key] = val
@@ -160,6 +164,7 @@ local function NewParser()
   -- TODO: not have recursion?
   local function ParseElement()
     local name = ParseName()
+    if not name then Error("opening tag") end
     local attrs = ParseAttributes()
     attrs[0] = name
     if Try"/" then
@@ -217,7 +222,7 @@ local function NewParser()
         end
         s = TryW()
       end
-      if s and Try"s" then ExpectS"tandalone"
+      if s and Try"s" then ExpectS"tandalone="
         local v = ParseAttributeValue()
         if v ~= "yes" and v ~= "no" then
           Error("correct xml standalone")
@@ -227,7 +232,6 @@ local function NewParser()
       Expect"?" Expect">"
       ParseW()
       Expect"<"
-      ParseW()
     end
     ExpectS"stream:stream"
     local attrs = ParseAttributes()

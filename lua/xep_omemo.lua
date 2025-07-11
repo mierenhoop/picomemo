@@ -180,7 +180,7 @@ return function(session)
         end
         if not found then
           list[#list+1] = {[0]="device", id=tostring(deviceid)}
-          local id = HookId(function(st2)
+          local id = session.HookId(function(st2)
             -- TODO: check if success
           end)
           local st = MakePublishStanza(id, xmlns..".devicelist", {
