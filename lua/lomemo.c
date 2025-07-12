@@ -72,6 +72,7 @@ static int SetupStore(lua_State *L) {
 
 static void CopySizedField(lua_State *L, int i, const char *f, int n, uint8_t *d, bool hastype) {
   lua_getfield(L, i, f);
+  // TODO: error message is  wrong when this fails
   const char *s = luaL_checkstring(L, -1);
   if (lua_rawlen(L, -1) == n+hastype)
     memcpy(d, s+hastype, n), lua_pop(L, 1);
