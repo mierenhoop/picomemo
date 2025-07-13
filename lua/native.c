@@ -21,7 +21,7 @@ int EncodeBase64(lua_State *L) {
   mbedtls_base64_encode(NULL, 0, &outlen, dec, len);
   if (!(enc = malloc(outlen))) return luaL_error(L, "Allocation failed");
   assert(mbedtls_base64_encode(enc, outlen, &outlen, dec, len) == 0);
-  lua_pushstring(L, enc);
+  lua_pushlstring(L, enc, outlen);
   free(enc);
   return 1;
 }
@@ -33,7 +33,7 @@ int DecodeBase64(lua_State *L) {
   mbedtls_base64_decode(NULL, 0, &outlen, enc, len);
   if (!(dec = malloc(outlen))) return luaL_error(L, "Allocation failed");
   if (mbedtls_base64_decode(dec, outlen, &outlen, enc, len) == 0) {
-    lua_pushstring(L, dec);
+    lua_pushlstring(L, dec, outlen);
     free(dec);
     return 1;
   } else {

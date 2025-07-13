@@ -241,7 +241,9 @@ local function NewSession(opts)
     GetFullJid = function() assert(isready) return fulljid end,
     GetBareJid = function() return barejid end,
   }
-  AddXep("xep_sm")
+  if not opts.disablesm then
+    AddXep("xep_sm")
+  end
   AddXep("xep_ping")
   AddXep("xep_omemo")
   HandleXmpp()

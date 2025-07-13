@@ -61,12 +61,12 @@ class XEP_0384Impl(XEP_0384):  # pylint: disable=invalid-name
     def _btbv_enabled(self) -> bool:
         return True
 
-    #async def _devices_blindly_trusted(
-    #    self,
-    #    blindly_trusted: FrozenSet[DeviceInformation],
-    #    identifier: Optional[str]
-    #) -> None:
-    #    log.info(f"[{identifier}] Devices trusted blindly: {blindly_trusted}")
+    async def _devices_blindly_trusted(
+        self,
+        blindly_trusted: FrozenSet[DeviceInformation],
+        identifier: Optional[str]
+    ) -> None:
+        log.info(f"[{identifier}] Devices trusted blindly: {blindly_trusted}")
 
     async def _prompt_manual_trust(
         self,
@@ -109,19 +109,21 @@ class OmemoEchoClient(ClientXMPP):
 
         namespace = xep_0384.is_encrypted(stanza)
         if namespace is None:
-            if body == "exit":
-                exit()
-            print("plain: " + body)
-            stanza = self.make_message(mto=mto, mtype=mtype)
-            stanza["body"] = body
-            stanza.send()
-            return
+            message = body
+        #    if body == "exit":
+        #        exit()
+        #    print("plain: " + body)
+        #    stanza = self.make_message(mto=mto, mtype=mtype)
+        #    stanza["body"] = body
+        #    stanza.send()
+        #    return
 
-        try:
-            message, device_information = await xep_0384.decrypt_message(stanza)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            print("Exception", traceback.format_exc())
-            return
+        if namespace is not None:
+            try:
+                message, device_information = await xep_0384.decrypt_message(stanza)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print("Exception", traceback.format_exc())
+                return
 
         try:
             await self.encrypted_reply(mto, mtype, message)

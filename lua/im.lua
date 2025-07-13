@@ -11,8 +11,11 @@ local session = NewSession({
   usetls = true,
   saslmech = "PLAIN",
   password = "adminpass",
+  disablesm = true,
 })
 
+
+local useomemo
 function OnStdin()
   local msg = io.read("*l")
   if msg == "" then return end
@@ -22,19 +25,32 @@ function OnStdin()
     end)
     return
   end
+  if msg == "/omemo" then
+    useomemo = true
+    return
+  end
   if session.IsReady() then
-    session.SendStanza {[0]="message",
-      id=session.GenerateId(),
-      to="user@localhost",
-      type="chat",
-      ["xml:lang"]="en",
-      {[0]="body", msg },
-    }
+    if not useomemo then
+      session.SendStanza {[0]="message",
+        id=session.GenerateId(),
+        to="user@localhost",
+        type="chat",
+        ["xml:lang"]="en",
+        {[0]="body", msg },
+      }
+    else
+      session.xep_omemo.SendMessage(msg, "user@localhost")
+    end
   end
 end
 
+local done
 function OnReceive(data)
   session.FeedStream(data)
+  if not done and session.IsReady() then
+    session.xep_omemo.SendMessage("Hello", "user@localhost")
+    done = true
+  end
 end
 
 EventLoop()

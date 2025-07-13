@@ -162,6 +162,7 @@ local function NewParser()
 
   -- Parse after opening <
   -- TODO: not have recursion?
+  -- TODO: extract non-stream element parser for BOSH, websocket, SCE
   local function ParseElement()
     local name = ParseName()
     if not name then Error("opening tag") end
