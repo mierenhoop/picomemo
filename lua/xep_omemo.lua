@@ -1,4 +1,6 @@
 local lomemo = require"lomemo"
+local util = require"util"
+local Q = util.Q
 
 local xmlns = "eu.siacs.conversations.axolotl"
 
@@ -22,20 +24,7 @@ local publish_open = {[0]="publish-options",
   },
 }
 
-local function Q(st, name, xmlns)
-  if st and type(st) == "table" then
-    for _, c in ipairs(st) do
-      if type(c) == "table" and c[0] == name and c.xmlns == xmlns then
-        return c
-      end
-    end
-  end
-end
-
-local function V(...)
-  assert(..., ErrValid)
-  return ...
-end
+local function V(...) assert(..., ErrValid) return ... end
 
 local function S(s) assert(type(s) == "string", ErrValid) return s end
 
@@ -54,7 +43,6 @@ return function(session)
   --  end
   --end
   local store = lomemo.SetupStore()
-  -- TODO: don't have union type here?
   ---@type {[string]: {[integer]: lomemo.Session}}
   local sessions = {}
 
@@ -172,6 +160,7 @@ return function(session)
     end
   end
   local function GetDeviceList(to, hook)
+    -- TODO: cache and use cached if exists
     session.SendStanza {[0]="iq",
       to=to, type="get", id=session.HookId(hook),
       {[0]="pubsub",xmlns="http://jabber.org/protocol/pubsub",
@@ -265,12 +254,10 @@ return function(session)
       }
   end
   return {
+    --deps= "xep_pep",
     nsfilter = xmlns,
     OnFeatures = function(features)
       GetDeviceList(session.GetBareJid(), HandleOurDeviceList)
-      -- TODO: only publish after got our list
-      --local bundle = store:GetBundle()
-      --AnnounceBundle(bundle)
     end,
     OnGotStanza = function(st)
       -- TODO: do something better
@@ -279,7 +266,6 @@ return function(session)
       end
     end,
     -- TODO: we can make a coroutine instead of the callbacks
-    -- TODO: cache what needs to be cached
     SendMessage = function(msg, to)
       GetDeviceList(to, function(st)
         local new = HandleRemoteDeviceList(st, to)

@@ -32,12 +32,26 @@ local function NewSession(opts)
   local skipdrain
   local barejid = opts.localpart.."@"..opts.domainpart
   local idhooks = {}
+  local nsfilters = {}
+  local nonsfilter = {}
 
   local function AddXep(name)
     local t = require(name)(session)
     assert(type(t) == "table")
     xeplist[#xeplist+1] = t
     session[name] = t
+    if t.nsfilter then
+      local fils = t.nsfilter
+      if type(fils) ~= "table" then fils = {fils} end
+      for _, fil in ipairs(fils) do
+        -- can only have one xep per xmlns
+        assert(not nsfilters[fil])
+        nsfilters[fil] = t
+      end
+      -- TODO: integrate nsfilters into calling hooks
+    else
+      nonsfilter[#nonsfilter+1] = t
+    end
   end
 
   local inhook = {}
@@ -94,9 +108,10 @@ local function NewSession(opts)
   -- TODO: only allow iq, message and presence don't return anything,
   -- except errors. Messages should be stored in database along with id
   -- so it can later be associated with the error
-  local function HookId(fn)
-    local id = GenerateId()
-    idhooks[id] = fn or function() end
+  local function HookId(id, fn)
+    if not fn then fn, id = id, GenerateId() end
+    idhooks[id] = idhooks[id] or {}
+    table.insert(idhooks[id], fn)
     return id
   end
 
@@ -210,7 +225,9 @@ local function NewSession(opts)
       local st = GetStanza()
       CallHooks("OnGotStanza", st)
       if st.id and idhooks[st.id] then
-        idhooks[st.id](st)
+        for _, hook in ipairs(idhooks[st.id]) do
+          hook(st)
+        end
         idhooks[st.id] = nil
       end
     end
@@ -244,8 +261,19 @@ local function NewSession(opts)
   if not opts.disablesm then
     AddXep("xep_sm")
   end
-  AddXep("xep_ping")
+  AddXep("xep_disco")
   AddXep("xep_omemo")
+  AddXep("xep_ping")
+  AddXep("xep_receipts")
+  AddXep("xep_sm")
+  for _, xep in ipairs(xeplist) do
+    local deps = xep.deps
+    if type(deps) ~= "table" then deps = {deps} end
+    for _, dep in ipairs(deps) do
+      assert(session[dep], "session: dependency '"..dep
+        .."' not met for '"..xep.."'")
+    end
+  end
   HandleXmpp()
   return session
 end
