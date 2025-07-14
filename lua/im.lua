@@ -48,7 +48,7 @@ local done
 function OnReceive(data)
   session.FeedStream(data)
   if not done and session.IsReady() then
-    session.xep_omemo.SendMessage("Hello", "user@localhost")
+    --session.xep_omemo.SendMessage("Hello", "user@localhost")
     done = true
   end
 end

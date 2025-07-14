@@ -1,5 +1,3 @@
-local buffer = {}
-
 -- TODO: should we have different escaping for content and 
 local function Escape(s)
   return (s:gsub("[&'\"<>]", {
@@ -9,25 +7,6 @@ local function Escape(s)
     ["<"] = "&lt;",
     [">"] = "&gt;",
   }))
-end
-
-function Write(fmt, ...)
-  local i = 1
-  local args = {...}
-  buffer[#buffer+1] = fmt:gsub("%%.", function(s)
-    if s == "%%" then return "%" end
-    local arg = assert(args[i])
-    i=i+1
-    if s == "%s" then return Escape(arg) end
-    if s == "%b" then return EncodeBase64(arg) end
-    if s == "%d" then return tostring(arg) end -- TODO: decimals?
-    error"format specifier not found"
-  end)
-end
-
-function Flush()
-  Send(table.concat(buffer))
-  buffer = {}
 end
 
 local p = table.insert

@@ -2,6 +2,9 @@ local lomemo = require"lomemo"
 
 local xmlns = "eu.siacs.conversations.axolotl"
 
+local ErrValid = "xep_omemo: XML not valid"
+local ErrNoKey = "xep_omemo: no key for our device"
+
 local function Field(var, value, typ)
   return {[0]="field",
     var = var,
@@ -19,34 +22,22 @@ local publish_open = {[0]="publish-options",
   },
 }
 
--- TODO: put this in a more top level
-local function SafeIndex(st, i, ...)
-  if not i then return st end
-  for j = 1, #st do
-    if st[j][0] == i then
-      local ok = true
-      for k, v in pairs(i) do
-        if st[k] ~= v then
-          ok = false
-          break
-        end
-      end
-      if ok then
-        return SafeIndex(st[j], ...)
-      end
-    end
-  end
-end
-
 local function Q(st, name, xmlns)
-  if st then
+  if st and type(st) == "table" then
     for _, c in ipairs(st) do
-      if c[0] == name and c.xmlns == xmlns then
+      if type(c) == "table" and c[0] == name and c.xmlns == xmlns then
         return c
       end
     end
   end
 end
+
+local function V(...)
+  assert(..., ErrValid)
+  return ...
+end
+
+local function S(s) assert(type(s) == "string", ErrValid) return s end
 
 return function(session)
   --local store
@@ -96,30 +87,20 @@ return function(session)
       }
     end
     local id = session.GenerateId()
-    local stanza = {[0]="iq",
-      type = "set",
-      id = id,
-      {[0]="pubsub",
-        xmlns="http://jabber.org/protocol/pubsub",
-        {[0]="publish",
-          node = xmlns..".bundles:" .. tostring(deviceid),
-          {[0]="item",
-            id = "current",
-            {[0]="bundle",
-              xmlns = xmlns,
-              {[0]="signedPreKeyPublic",
-                signedPreKeyId = bundle.spk_id,
-                EncodeBase64(bundle.spk),
-              },
-              {[0]="signedPreKeySignature", EncodeBase64(bundle.spks) },
-              {[0]="identityKey", EncodeBase64(bundle.ik) },
-              pks,
-            },
-          },
+    local stanza = MakePublishStanza(id, xmlns..".bundles:" .. tostring(deviceid),
+    {[0]="item",
+      id = "current",
+      {[0]="bundle",
+        xmlns = xmlns,
+        {[0]="signedPreKeyPublic",
+          signedPreKeyId = bundle.spk_id,
+          EncodeBase64(bundle.spk),
         },
-        publish_open,
+        {[0]="signedPreKeySignature", EncodeBase64(bundle.spks) },
+        {[0]="identityKey", EncodeBase64(bundle.ik) },
+        pks,
       },
-    }
+    })
     session.SendStanza(stanza)
   end
 
@@ -134,15 +115,16 @@ return function(session)
 
   local function ParseBundle(st, to, rid)
     local bundle = Q(Q(Q(Q(st, "pubsub", "http://jabber.org/protocol/pubsub"), "items"), "item", "http://jabber.org/protocol/pubsub"), "bundle", xmlns)
+    assert(bundle, ErrValid)
     local spk = Q(bundle, "signedPreKeyPublic")
-    local spk_id = tonumber(spk.signedPreKeyId)
-    spk = DecodeBase64(spk[1])
-    local spks = DecodeBase64(Q(bundle, "signedPreKeySignature")[1])
-    local ik = DecodeBase64(Q(bundle, "identityKey")[1])
-    local prekeys = Q(bundle, "prekeys")
+    local spk_id = V(tonumber(spk.signedPreKeyId))
+    spk = DecodeBase64(S(spk[1]))
+    local spks = assert(DecodeBase64(S(V(Q(bundle, "signedPreKeySignature"))[1])))
+    local ik = assert(DecodeBase64(S(V(Q(bundle, "identityKey"))[1])))
+    local prekeys = V(Q(bundle, "prekeys"))
     local pk = prekeys[math.random(#prekeys)]
-    local pk_id = tonumber(pk.preKeyId)
-    pk = DecodeBase64(pk[1])
+    local pk_id = V(tonumber(pk.preKeyId))
+    pk = assert(DecodeBase64(S(pk[1])))
     return {
       spks = spks,
       spk = spk,
@@ -154,8 +136,8 @@ return function(session)
   end
 
   local function DecryptMessage(st)
-    local enc = Q(st, "encrypted", xmlns)
-    local header = Q(enc, "header")
+    local enc = V(Q(st, "encrypted", xmlns))
+    local header = V(Q(enc, "header"))
     local payload = Q(enc, "payload")
     if payload then payload = payload[1] end
     local foundkey
@@ -165,37 +147,27 @@ return function(session)
         break
       end
     end
-    assert(foundkey)
+    assert(foundkey, ErrNoKey)
     -- TODO: something more reliable
-    local from = st.from:match("^([^/]*)")
-    print"e"
+    local from = S(st.from):match("^([^/]*)")
     local ses = sessions[from]
-    print"e"
     if not ses then
       ses = {}
       sessions[from] = ses
     end
-    print"e"
-    local sid = tonumber(header.sid)
-    print"e"
+    local sid = V(tonumber(header.sid))
     if not ses[sid] then
       ses[sid] = lomemo.NewSession()
     end
-    print"e"
     ses = ses[sid]
-    print"e"
-    local enckey = DecodeBase64(foundkey[1])
-    print"e"
-    -- TODO: prekey might be other than true
+    local enckey = assert(DecodeBase64(S(foundkey[1])))
     local ispk = foundkey.prekey == "true"
-    print"e"
     -- TODO: cbs
     local key = assert(ses:DecryptKey(store, ispk, enckey, {load=function() end, store=function() end}))
-    print"e"
     if payload then
-      local encmsg = DecodeBase64(payload)
-      local iv = DecodeBase64(Q(header,"iv")[1])
-      local msg = lomemo.DecryptMessage(encmsg, key, iv)
+      local encmsg = assert(DecodeBase64(payload))
+      local iv = assert(DecodeBase64(S(V(Q(header,"iv"))[1])))
+      local msg = assert(lomemo.DecryptMessage(encmsg, key, iv))
       return msg
     end
   end
@@ -207,9 +179,12 @@ return function(session)
       },
     }
   end
+  local function QueryList(st)
+    return Q(Q(Q(Q(st, "pubsub", "http://jabber.org/protocol/pubsub"), "items"), "item", "http://jabber.org/protocol/pubsub"), "list", xmlns)
+  end
   -- returns list of new devices
   local function HandleRemoteDeviceList(st, to)
-    local list = Q(Q(Q(Q(st, "pubsub", "http://jabber.org/protocol/pubsub"), "items"), "item", "http://jabber.org/protocol/pubsub"), "list", xmlns)
+    local list = QueryList(st)
     local ss = sessions[to]
     if not ss then
       ss = {}
@@ -227,7 +202,7 @@ return function(session)
     return new
   end
   local function HandleOurDeviceList(st)
-      local list = Q(Q(Q(Q(st, "pubsub", "http://jabber.org/protocol/pubsub"), "items"), "item", "http://jabber.org/protocol/pubsub"), "list", xmlns)
+      local list = QueryList(st)
       local found
       if list then
         for _, dev in ipairs(list) do
@@ -237,6 +212,7 @@ return function(session)
         list = {[0]="list",xmlns=xmlns}
       end
       if not found then
+        -- TODO: should we verify the format of the existing device list entries?
         list[#list+1] = {[0]="device", id=tostring(deviceid)}
         local id = session.HookId(function(st2)
           -- TODO: check if success
@@ -289,6 +265,7 @@ return function(session)
       }
   end
   return {
+    nsfilter = xmlns,
     OnFeatures = function(features)
       GetDeviceList(session.GetBareJid(), HandleOurDeviceList)
       -- TODO: only publish after got our list
@@ -296,20 +273,6 @@ return function(session)
       --AnnounceBundle(bundle)
     end,
     OnGotStanza = function(st)
-      --[[
-      if st[0] == "message" and st.id == dlreqid then
-        local list = {}
-        local devicelist = SafeIndex(st, {"event",xmlns="http://jabber.org/protocol/pubsub#event"},{"items", node=xmlns..".devicelist"}, {"item",id="current"},{"list", xmlns=xmlns})
-        for i = 1, #devicelist do
-          if type(devicelist[i]) == "table" then
-            local id = tonumber(devicelist[i].id)
-            if id and 0 < id and id < 2^32 then
-              table.insert(list, id)
-            end
-          end
-        end
-      end
-      ]]
       -- TODO: do something better
       if st[0] == "message" and Q(st, "encrypted", xmlns) then
         print("Got omemo: ", DecryptMessage(st))
