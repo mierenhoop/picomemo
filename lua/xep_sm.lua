@@ -45,7 +45,7 @@ return function(session)
         end
         -- TODO: this is a hack for if the gc doesn't ever shrink the table
         -- this resets the table if it's empty
-        if not pending[n+1] then pending = {} end
+        if not pending[h+1] then pending = {} end
       elseif st[0] == "enabled" then
         enabled = true
       elseif st[0] == "failed" then

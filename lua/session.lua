@@ -1,6 +1,6 @@
-require"write"
+local xml = require"xml"
 local NewDatabase = require"db"
-
+local tcp = require"transport_tcp"
 local xmppstream = require"xmppstream"
 
 local function GenerateId()
@@ -14,7 +14,7 @@ end
 
 local function LogStanza(st, dir)
   local buf = {}
-  EncodeXml(st, buf, dir.."| ")
+  xml.Encode(st, buf, dir.."| ")
   io.write(table.concat(buf))
 end
 
@@ -28,12 +28,12 @@ local function NewSession(opts)
   local fulljid
   local pending = {}
   local xeplist = {}
-  local sendbuf = {}
   local skipdrain
   local barejid = opts.localpart.."@"..opts.domainpart
   local idhooks = {}
   local nsfilters = {}
   local nonsfilter = {}
+  local transport = tcp(opts.domainpart)
 
   local function AddXep(name)
     local t = require(name)(session)
@@ -73,13 +73,12 @@ local function NewSession(opts)
   end
 
   local function Drain()
-    if #sendbuf > 0 then
+    if not transport.IsEmpty() then
       CallHooks("OnDrain")
     end
-    if #sendbuf > 0 then
+    if not transport.IsEmpty() then
       print"drain"
-      Send(table.concat(sendbuf))
-      sendbuf = {}
+      transport.Flush()
     end
   end
 
@@ -87,22 +86,7 @@ local function NewSession(opts)
     io.write("\x1b[32m")
     LogStanza(stanza, ">")
     print("\x1b[0m")
-    EncodeXml(stanza, sendbuf)
-  end
-
-  local function SendStreamHeader()
-    table.insert(sendbuf, "<?xml version=\"1.0\"?>")
-    EncodeXml({[0]="stream:stream",
-      version = "1.0",
-      ["xml:lang"] = "en",
-      xmlns = "jabber:client",
-      -- TODO: from?
-      to = opts.domainpart,
-      ["xmlns:stream"] = "http://etherx.jabber.org/streams",
-    }, sendbuf)
-    -- HACK
-    assert(sendbuf[#sendbuf] == "/>")
-    sendbuf[#sendbuf] = ">"
+    transport.SendStanza(stanza)
   end
 
   -- TODO: only allow iq, message and presence don't return anything,
@@ -162,7 +146,7 @@ local function NewSession(opts)
         ExpectStanza("proceed", "urn:ietf:params:xml:ns:xmpp-tls")
         Handshake()
         stream = xmppstream()
-        SendStreamHeader()
+        transport.OpenStream()
         hastls = true
         return HandleHeader()
       end
@@ -192,7 +176,7 @@ local function NewSession(opts)
           assert(false)
         end
         stream = xmppstream()
-        SendStreamHeader()
+        transport.OpenStream()
         hassasl = true
         return HandleHeader()
       end
@@ -214,7 +198,7 @@ local function NewSession(opts)
       CallHooks("OnFeatures", features)
     end
 
-    SendStreamHeader()
+    transport.OpenStream()
     HandleHeader()
     session.SendStanza {[0]="presence",
       id=GenerateId(),

@@ -11,7 +11,7 @@ end
 
 local p = table.insert
 
-function EncodeXml(t, b, indent)
+local function Encode(t, b, indent)
   if type(t) ~= "table" then
     local esc = Escape(tostring(t))
     if indent then
@@ -48,7 +48,7 @@ function EncodeXml(t, b, indent)
       p(b,"\n")
     end
     for i = 1, #t do
-      EncodeXml(t[i], b, in2)
+      Encode(t[i], b, in2)
     end
     if indent then p(b,indent) end
     p(b,"</") p(b,name) p(b,">")
@@ -57,3 +57,7 @@ function EncodeXml(t, b, indent)
   end
   if indent then p(b,"\n") end
 end
+
+return {
+  Encode = Encode,
+}
