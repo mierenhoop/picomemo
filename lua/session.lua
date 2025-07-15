@@ -216,7 +216,7 @@ local function NewSession(opts)
 
     SendStreamHeader()
     HandleHeader()
-    SendStanza {[0]="presence",
+    session.SendStanza {[0]="presence",
       id=GenerateId(),
       {[0]="show", "away" },
     }
@@ -258,9 +258,6 @@ local function NewSession(opts)
     GetFullJid = function() assert(isready) return fulljid end,
     GetBareJid = function() return barejid end,
   }
-  if not opts.disablesm then
-    AddXep("xep_sm")
-  end
   AddXep("xep_disco")
   AddXep("xep_omemo")
   AddXep("xep_ping")

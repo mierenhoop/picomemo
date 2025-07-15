@@ -11,7 +11,7 @@ local session = NewSession({
   usetls = true,
   saslmech = "PLAIN",
   password = "adminpass",
-  disablesm = true,
+  --disablesm = true,
 })
 
 
