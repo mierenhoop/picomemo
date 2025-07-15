@@ -23,4 +23,16 @@ describe("xmppstream", function()
   it("should allow omitting xml declaration",
     TestInputs({"<stream:stream  xml:lang='en' version=\"1.0\" >"},
     {{[0]="stream:stream",["xml:lang"]="en",version="1.0"}}))
+  it("should allow omitting xml declaration",
+    TestInputs({"<stream:stream  xml:lang='en' version=\"1.0\" >"},
+    {{[0]="stream:stream",["xml:lang"]="en",version="1.0"}}))
+  it("should parse CDATA",
+    TestInputs({"<stream:stream><x>asdf<![CDATA[<><f.dakfjk'''\"'>>]> ]]e]]]o]>]]>fjkdjafk</x>"},
+    {{[0]="stream:stream"},{[0]="x","asdf<><f.dakfjk'''\"'>>]> ]]e]]]o]>fjkdjafk"}}))
+  it("should parse empty CDATA",
+    TestInputs({"<stream:stream><x><![CDATA[]]></x>"},
+    {{[0]="stream:stream"},{[0]="x",""}}))
+  it("should parse fragmented CDATA",
+    TestInputs({"<stream:stream><x><![CDATA".."[".."e".."]".."]".."></x>"},
+    {{[0]="stream:stream"},{[0]="x","e"}}))
 end)

@@ -76,13 +76,43 @@ local function NewParser()
   end
 
   local function Error(err)
-    error("error: expected " .. err .. " at char " .. pos)
+    error("xmppstream: expected " .. err .. " at char " .. pos)
   end
 
   local function Expect(patt, err)
     local c = Try(patt)
     if not c then Error(err or patt) end
     return c
+  end
+
+  local function TryC(c)
+    if Peek() == c then
+      pos = pos + 1
+      return c
+    end
+  end
+
+  local function ExpectC(c, err)
+    if not TryC(c) then Error(err or c) end
+    return c
+  end
+
+  local function FindC(c)
+    repeat
+      WaitForData()
+      local b = inputs[#inputs]:find(c, pos, true)
+      pos = (b or #inputs[#inputs]) + 1
+    until b
+    return c
+  end
+
+  local function Find(patt)
+    repeat
+      WaitForData()
+      local b = inputs[#inputs]:find(patt, pos, true)
+      pos = (b or #inputs[#inputs]) + 1
+    until b
+    return inputs[#inputs]:sub(b,b)
   end
 
   local function ExpectS(s, err)
@@ -102,6 +132,7 @@ local function NewParser()
 
   -- Returns XML Name as string or nil
   local function ParseName()
+    -- TODO: optimize
     Save()
     -- TODO: verify UTF-8
     if Try("[:_%a\x80-\xff]") then
@@ -120,13 +151,12 @@ local function NewParser()
   end
 
   local function ParseAttributeValue()
-    local q = Expect("['\"]", "' or \"")
-    local notq = q == "'" and "[^']" or "[^\"]"
+    local q = TryC'"' or ExpectC"'"
     Save()
-    repeat until not Try(notq)
-    local s = GetSaved()
+    FindC(q)
+    -- TODO: remove sub
+    local s = GetSaved():sub(1,-2)
     s = ReplaceEntities(s)
-    Expect(q)
     return s
   end
 
@@ -136,7 +166,7 @@ local function NewParser()
     while TryW() do
       local key = ParseName()
       if not key then break end
-      Expect"="
+      ExpectC"="
       local val = ParseAttributeValue()
       attrs[key] = val
     end
@@ -144,18 +174,16 @@ local function NewParser()
   end
 
   local function ParseCdata()
-      Expect("%[", "[") ExpectS"CDATA" Expect("%[", "[")
+      ExpectC"[" ExpectS"CDATA" ExpectC"["
       Save()
       while true do
-        -- TODO: xml chars
-        Try"[^%]]"
-        local i=0
-        while Try"%]" do
+        FindC"]"
+        local i=1
+        while TryC"]" do
           i=i+1
         end
-        if i >= 2 and Try">" then
-          -- TODO: right? maybe have argument to GetSaved() for end offset
-          return GetSaved():sub(1, -3)
+        if i >= 2 and TryC">" then
+          return GetSaved():sub(1, -4)
         end
       end
   end
@@ -168,35 +196,44 @@ local function NewParser()
     if not name then Error("opening tag") end
     local attrs = ParseAttributes()
     attrs[0] = name
-    if Try"/" then
-      Expect">"
+    if TryC"/" then
+      ExpectC">"
       return attrs
     end
-    Expect">"
+    ExpectC">"
+    local content,istab
     while true do
       -- TODO: do we want to omit the whitespace before possible content?
-      ParseW()
+      --ParseW()
       Save()
       -- TODO: xml chars
-      if Try"[^<]" then
-        while Try"[^<]" do
-        end
-        local content = GetSaved()
+      if not TryC"<" then
+        FindC"<"
+        -- TODO: remove sub
+        local cc = GetSaved():sub(1,-2)
         -- TODO: strip whitespace?
-        content = ReplaceEntities(content:gsub(Wpatt.."*$", ""))
-        attrs[#attrs+1] = content
+        cc = ReplaceEntities(cc--[[:gsub(Wpatt.."*$", "")]])
+        if not content then content = cc
+        elseif istab then content[#content+1] = cc
+        else content,istab = {content,cc},true
+        end
       else
         Unsave()
       end
-      Expect"<"
-      if Try"!" then
-        -- TODO: merge CDATA with other content in same slot
-        attrs[#attrs+1] = ParseCdata()
+      if TryC"!" then
+        local cc = ParseCdata()
+        if not content then content = cc
+        elseif istab then content[#content+1] = cc
+        else content,istab = {content,cc},true
+        end
       else
-        if Try"/" then
+        if content then
+          attrs[#attrs+1] = istab and table.concat(content) or content
+        end
+        if TryC"/" then
           if ParseName() ~= name then Error("same closing tag as opening tag") end
           ParseW()
-          Expect">"
+          ExpectC">"
           break
         end
         attrs[#attrs+1] = ParseElement()
@@ -207,8 +244,8 @@ local function NewParser()
 
   local r = coroutine.wrap(function()
     local s = TryW()
-    Expect"<"
-    if not s and Try"?" then
+    ExpectC"<"
+    if not s and TryC"?" then
       ExpectS"xml"
       ExpectW()
       ExpectS"version="
@@ -217,35 +254,35 @@ local function NewParser()
         Error("correct xml version")
       end
       local s = TryW()
-      if s and Try"e" then ExpectS"ncoding="
+      if s and TryC"e" then ExpectS"ncoding="
         if not ParseAttributeValue():match"^[A-Za-z][A-Za-z0-9%._%-]*$" then
           Error("correct xml encoding")
         end
         s = TryW()
       end
-      if s and Try"s" then ExpectS"tandalone="
+      if s and TryC"s" then ExpectS"tandalone="
         local v = ParseAttributeValue()
         if v ~= "yes" and v ~= "no" then
           Error("correct xml standalone")
         end
         ParseW()
       end
-      Expect"?" Expect">"
+      ExpectC"?" ExpectC">"
       ParseW()
-      Expect"<"
+      ExpectC"<"
     end
     ExpectS"stream:stream"
     local attrs = ParseAttributes()
     attrs[0] = "stream:stream"
     coroutine.yield(attrs)
-    Expect">"
+    ExpectC">"
     while true do
       ParseW()
-      Expect"<"
-      if Try"/" then
+      ExpectC"<"
+      if TryC"/" then
         ExpectS"stream:stream"
         ParseW()
-        Expect">"
+        ExpectC">"
         print"Stream ended"
         return
       end

@@ -1,6 +1,6 @@
 local lomemo = require"lomemo"
 local util = require"util"
-local Q = util.Q
+local Q,S = util.Q,util.S
 
 local xmlns = "eu.siacs.conversations.axolotl"
 
@@ -25,8 +25,6 @@ local publish_open = {[0]="publish-options",
 }
 
 local function V(...) assert(..., ErrValid) return ... end
-
-local function S(s) assert(type(s) == "string", ErrValid) return s end
 
 return function(session)
   --local store
@@ -103,14 +101,20 @@ return function(session)
 
   local function ParseBundle(st, to, rid)
     local bundle = Q(Q(Q(Q(st, "pubsub", "http://jabber.org/protocol/pubsub"), "items"), "item", "http://jabber.org/protocol/pubsub"), "bundle", xmlns)
-    assert(bundle, ErrValid)
+    assert(bundle, "xep_omemo: no bundle")
     local spk = Q(bundle, "signedPreKeyPublic")
     local spk_id = V(tonumber(spk.signedPreKeyId))
     spk = DecodeBase64(S(spk[1]))
     local spks = assert(DecodeBase64(S(V(Q(bundle, "signedPreKeySignature"))[1])))
     local ik = assert(DecodeBase64(S(V(Q(bundle, "identityKey"))[1])))
     local prekeys = V(Q(bundle, "prekeys"))
-    local pk = prekeys[math.random(#prekeys)]
+    -- filter out all whitespace
+    local j = 0
+    for i = 1, #prekeys do
+      if type(prekeys[i]) == "table" then j=j+1 prekeys[j]=prekeys[i] end
+    end
+    assert(j>0, "xep_omemo: no prekeys")
+    local pk = prekeys[math.random(j)]
     local pk_id = V(tonumber(pk.preKeyId))
     pk = assert(DecodeBase64(S(pk[1])))
     return {
@@ -130,7 +134,7 @@ return function(session)
     if payload then payload = payload[1] end
     local foundkey
     for _, key in ipairs(header) do
-      if tonumber(key.rid) == deviceid then
+      if type(key) == "table" and tonumber(key.rid) == deviceid then
         foundkey = key
         break
       end

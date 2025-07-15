@@ -9,4 +9,6 @@ local function Q(st, name, xmlns)
   end
 end
 
-return {Q=Q}
+local function S(s) assert(type(s) == "string", "xml: expected string") return s end
+
+return {Q=Q, S=S}

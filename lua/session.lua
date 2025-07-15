@@ -2,6 +2,8 @@ local xml = require"xml"
 local NewDatabase = require"db"
 local tcp = require"transport_tcp"
 local xmppstream = require"xmppstream"
+local util = require"util"
+local Q = util.Q
 
 local function GenerateId()
   -- TODO: maybe use something else
@@ -99,7 +101,7 @@ local function NewSession(opts)
     return id
   end
 
-  HandleXmpp = coroutine.wrap(function()
+  local HandleXmpp = coroutine.wrap(function()
     local function GetStanza()
       Drain()
       local stanza = coroutine.yield()
@@ -128,15 +130,7 @@ local function NewSession(opts)
       streamattrs = ExpectStanza("stream:stream", "jabber:client")
       local features = ExpectStanza("stream:features", nil)
 
-      local function HasFeature(tag, ns)
-        for _, feature in ipairs(features) do
-          -- TODO: better error
-          assert(type(feature) == "table")
-          if feature[0] == tag and feature.xmlns == ns then
-            return feature
-          end
-        end
-      end
+      local function HasFeature(tag, ns) return Q(features, tag, ns) end
 
       if opts.usetls and not hastls then
         assert(HasFeature("starttls", "urn:ietf:params:xml:ns:xmpp-tls"))
@@ -157,9 +151,10 @@ local function NewSession(opts)
         assert(opts.password)
         local hasmech
         for _, mech in ipairs(mechs) do
-          assert(mech[0] == "mechanism" and #mech == 1)
-          -- TODO: what if spaces around XML content?
-          if mech[1] == opts.saslmech then hasmech = true break end
+          if type(mech) == "table" then
+            assert(mech[0] == "mechanism" and #mech == 1)
+            if mech[1] == opts.saslmech then hasmech = true break end
+          end
         end
         assert(hasmech)
         if opts.saslmech == "PLAIN" then
@@ -189,9 +184,9 @@ local function NewSession(opts)
           }
         }
         local bindres = ExpectStanza("iq", nil)
-        assert(#bindres == 1 and bindres[1][0] == "bind" and bindres[1].xmlns == "urn:ietf:params:xml:ns:xmpp-bind")
-        assert(bindres.id == id)
-        fulljid = bindres[1][1][1]
+        local jidel = assert(Q(Q(bindres, "bind", "urn:ietf:params:xml:ns:xmpp-bind"), "jid"), "session: no bind jid")
+        assert(bindres.id == id, "session: bind id not expected")
+        fulljid = util.S(jidel[1])
         -- TODO: check if fulljid == opts.*part
       end
       isready = true

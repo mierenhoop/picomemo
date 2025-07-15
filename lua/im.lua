@@ -1,19 +1,7 @@
 #!/usr/bin/env lua5.4
 require"native"
 
-local NewSession = require"session"
-
-Connect("localhost", "localhost", "5222")
-local session = NewSession({
-  localpart = "admin",
-  domainpart = "localhost",
-  resourcepart = "testres",
-  usetls = true,
-  saslmech = "PLAIN",
-  password = "adminpass",
-  --disablesm = true,
-})
-
+local session
 
 local useomemo
 function OnStdin()
@@ -28,6 +16,8 @@ function OnStdin()
   if msg == "/omemo" then
     useomemo = true
     return
+  elseif msg == "/plain" then
+    useomemo = false
   end
   if session.IsReady() then
     if not useomemo then
@@ -52,5 +42,21 @@ function OnReceive(data)
     done = true
   end
 end
+
+require"prelude"
+
+local NewSession = require"session"
+
+Connect("localhost", "localhost", "5222")
+session = NewSession({
+  localpart = "admin",
+  domainpart = "localhost",
+  resourcepart = "testres",
+  usetls = true,
+  saslmech = "PLAIN",
+  password = "adminpass",
+  --disablesm = true,
+})
+
 
 EventLoop()
