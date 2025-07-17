@@ -1,9 +1,9 @@
-LUA=lua5.4
+LUA?=lua5.3
 CFLAGS= -Wall -Wextra -Wno-unused -Wno-pointer-sign -Wno-sign-compare
 
 STORES=../o/store1.bin ../o/store2.bin
 
-all: lomemo.so native.so test
+all: lomemo.so test
 
 test: lomemo.so $(STORES)
 	busted --lua=$(LUA)
@@ -11,7 +11,7 @@ test: lomemo.so $(STORES)
 $(STORES): lomemo.so
 	for store in $(STORES); do \
 		mkdir -p $$(dirname $$store); \
-		lua5.4 -e 'io.write(require"lomemo".SetupStore():Serialize())' > $$store; \
+		$(LUA) -e 'io.write(require"lomemo".SetupStore():Serialize())' > $$store; \
 	done
 
 lomemo.so: lomemo.c ../omemo.c ../c25519.c
@@ -19,4 +19,4 @@ lomemo.so: lomemo.c ../omemo.c ../c25519.c
 
 .PHONY: clean
 clean:
-	rm -f lomemo.so
+	rm -f lomemo.so $(STORES)

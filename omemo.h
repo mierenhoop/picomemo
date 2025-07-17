@@ -106,12 +106,6 @@ struct omemoBundle {
   uint32_t pk_id, spk_id;
 };
 
-/*struct omemoCallbacks {
-  int (*getrandom)(void *, size_t, void *user);
-  int (*loadmessagekey)(struct omemoMessageKey *, void *user);
-  int (*storemessagekey)(const struct omemoMessageKey *, void *user);
-};*/
-
 /**
  * User supplied function.
  *
@@ -166,8 +160,6 @@ int omemoSetupStore(struct omemoStore *store);
 int omemoRefillPreKeys(struct omemoStore *store);
 
 int omemoRotateSignedPreKey(struct omemoStore *store);
-
-int omemoGenerateRegistrationId(uint32_t *id);
 
 size_t omemoGetSerializedStoreSize(const struct omemoStore *store);
 void omemoSerializeStore(uint8_t *d, const struct omemoStore *store);

@@ -255,12 +255,6 @@ static int GeneratePreKey(struct omemoPreKey *pk, uint32_t id) {
   return GenerateKeyPair(&pk->kp);
 }
 
-int omemoGenerateRegistrationId(uint32_t *id) {
-  TRY(omemoRandom(id, sizeof(*id)));
-  *id = (*id % 16380) + 1;
-  return 0;
-}
-
 static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey signprv,
                                     const uint8_t *msg, size_t n) {
   assert(n <= 33);

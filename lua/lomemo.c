@@ -1,3 +1,19 @@
+/**
+ * Copyright 2025 mierenhoop
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -9,6 +25,19 @@
 #include <lauxlib.h>
 
 #include "omemo.h"
+
+#if LUA_VERSION_NUM > 501
+#define luaL_openlib(L, name, reg, nup) luaL_setfuncs(L, reg, nup)
+#endif
+
+#define CheckLStringFix(idx, fix, err) CheckLStringFix(L, idx, fix, "omemo: " err " size wrong")
+const char *(CheckLStringFix)(lua_State *L, int idx, int fix, const char *err) {
+  size_t n;
+  const char *s = luaL_checklstring(L, idx, &n);
+  if (n != (fix)) luaL_argerror(L, idx, err);
+  return s;
+}
+
 
 struct Session {
   struct omemoSession s;
@@ -30,9 +59,7 @@ int omemoLoadMessageKey(struct omemoSession *_session, struct omemoMessageKey *k
   lua_pushinteger(L, k->nr);
   lua_call(L, 3, 1);
   if (lua_isstring(L, -1)) {
-    if (lua_rawlen(L, -1) != sizeof(k->mk))
-      luaL_error(L, "omemo: message key size");
-    memcpy(k->mk, luaL_checkstring(L, -1), sizeof(k->mk));
+    memcpy(k->mk, CheckLStringFix(-1, sizeof(k->mk), "message key"), sizeof(k->mk));
     lua_pop(L, 1);
     return 0;
   }
@@ -52,8 +79,7 @@ int omemoStoreMessageKey(struct omemoSession *_session, const struct omemoMessag
   lua_call(L, 5, 1);
   int r = lua_toboolean(L, -1);
   lua_pop(L, 1);
-  // TODO: other code than 1
-  return r ? 0 : 1;
+  return r ? 0 : OMEMO_EUSER;
 }
 
 void *Alloc(lua_State *L, size_t n) {
@@ -63,8 +89,9 @@ void *Alloc(lua_State *L, size_t n) {
 }
 
 static int SetupStore(lua_State *L) {
-  struct omemoStore *store = lua_newuserdatauv(L, sizeof(struct omemoStore), 0);
-  luaL_setmetatable(L, "lomemo.Store");
+  struct omemoStore *store = lua_newuserdata(L, sizeof(struct omemoStore));
+  luaL_getmetatable(L, "lomemo.Store");
+  lua_setmetatable(L, -2);
   if (omemoSetupStore(store))
     luaL_error(L, "setup store");
   return 1;
@@ -73,16 +100,18 @@ static int SetupStore(lua_State *L) {
 static void CopySizedField(lua_State *L, int i, const char *f, int n, uint8_t *d, bool hastype) {
   lua_getfield(L, i, f);
   // TODO: error message is  wrong when this fails
-  const char *s = luaL_checkstring(L, -1);
-  if (lua_rawlen(L, -1) == n+hastype)
+  size_t len;
+  const char *s = luaL_checklstring(L, -1, &len);
+  if (len == n+hastype)
     memcpy(d, s+hastype, n), lua_pop(L, 1);
   else
     lua_pop(L, 1), luaL_argerror(L, i, "field not right size");
 }
 
 static int NewSession(lua_State *L) {
-  struct Session *session = lua_newuserdatauv(L, sizeof(struct Session), 0);
-  luaL_setmetatable(L, "lomemo.Session");
+  struct Session *session = lua_newuserdata(L, sizeof(struct Session));
+  luaL_getmetatable(L, "lomemo.Session");
+  lua_setmetatable(L, -2);
   // TODO: is this needed?
   memset(session, 0, sizeof(struct Session));
   return 1;
@@ -90,8 +119,9 @@ static int NewSession(lua_State *L) {
 
 static int InitFromBundle(lua_State *L) {
   struct omemoStore *store = luaL_checkudata(L, 1, "lomemo.Store");
-  struct Session *session = lua_newuserdatauv(L, sizeof(struct Session), 0);
-  luaL_setmetatable(L, "lomemo.Session");
+  struct Session *session = lua_newuserdata(L, sizeof(struct Session));
+  luaL_getmetatable(L, "lomemo.Session");
+  lua_setmetatable(L, -2);
   struct omemoBundle bundle = {0};
 #define C(ht, f) CopySizedField(L, 2, #f, sizeof(bundle.f), bundle.f, ht)
   C(0, spks);
@@ -120,21 +150,20 @@ static int InitFromBundle(lua_State *L) {
 }
 
 static int DecryptKey(lua_State *L) {
+  size_t n;
   struct Session *session = luaL_checkudata(L, 1, "lomemo.Session");
   struct omemoStore *store = luaL_checkudata(L, 2, "lomemo.Store");
   // TODO: check for nil?
   bool isprekey = lua_toboolean(L, 3);
-  const char *s = luaL_checkstring(L, 4);
-  size_t n = lua_rawlen(L, 4);
+  const char *s = luaL_checklstring(L, 4, &n);
   omemoKeyPayload deckey;
   session->L = L;
-  int r = omemoDecryptKey(&session->s, store, deckey, isprekey, s, n);
-  if (!r) {
+  int r = omemoDecryptKey(&session->s, store, deckey, isprekey, s, n); if (!r) {
     lua_pushlstring(L, deckey, sizeof(deckey));
     return 1;
   } else {
     lua_pushnil(L);
-    lua_pushstring(L, "omemo: decrypt key failed");
+    lua_pushstring(L, "lomemo: decrypt key failed");
     return 2;
   }
 }
@@ -143,9 +172,7 @@ static int EncryptKey(lua_State *L) {
   struct Session *session = luaL_checkudata(L, 1, "lomemo.Session");
   struct omemoStore *store = luaL_checkudata(L, 2, "lomemo.Store");
   // TODO: check for nil?
-  const char *s = luaL_checkstring(L, 3);
-  size_t n = lua_rawlen(L, 3);
-  if (n != sizeof(omemoKeyPayload)) luaL_argerror(L, 3, "key size not right");
+  const char *s = CheckLStringFix(3, sizeof(omemoKeyPayload), "key");
   struct omemoKeyMessage enc;
   int r = omemoEncryptKey(&session->s, store, &enc, s);
   if (!r) {
@@ -154,18 +181,19 @@ static int EncryptKey(lua_State *L) {
     return 2;
   } else {
     lua_pushnil(L);
-    lua_pushstring(L, "omemo: decrypt key failed");
+    lua_pushstring(L, "lomemo: decrypt key failed");
     return 2;
   }
 }
 
 static int DeserializeSession(lua_State *L) {
-  const char *s = luaL_checkstring(L, 1);
-  size_t n = lua_rawlen(L, 1);
-  struct Session *session = lua_newuserdatauv(L, sizeof(struct Session), 0);
+  size_t n;
+  const char *s = luaL_checklstring(L, 1, &n);
+  struct Session *session = lua_newuserdata(L, sizeof(struct Session));
   if (omemoDeserializeSession(s, n, &session->s))
-    luaL_error(L, "omemo: deserializing protobuf");
-  luaL_setmetatable(L, "lomemo.Session");
+    luaL_error(L, "lomemo: deserializing protobuf");
+  luaL_getmetatable(L, "lomemo.Session");
+  lua_setmetatable(L, -2);
   return 1;
 }
 
@@ -180,12 +208,13 @@ static int SerializeSession(lua_State *L) {
 }
 
 static int DeserializeStore(lua_State *L) {
-  const char *s = luaL_checkstring(L, 1);
-  size_t n = lua_rawlen(L, 1);
-  struct omemoStore *store = lua_newuserdatauv(L, sizeof(struct omemoStore), 0);
+  size_t n;
+  const char *s = luaL_checklstring(L, 1, &n);
+  struct omemoStore *store = lua_newuserdata(L, sizeof(struct omemoStore));
   if (omemoDeserializeStore(s, n, store))
-    luaL_error(L, "omemo: deserializing protobuf");
-  luaL_setmetatable(L, "lomemo.Store");
+    luaL_error(L, "lomemo: deserializing protobuf");
+  luaL_getmetatable(L, "lomemo.Store");
+  lua_setmetatable(L, -2);
   return 1;
 }
 
@@ -224,17 +253,31 @@ static int GetBundle(lua_State *L) {
     lua_setfield(L, -2, "pk");
     lua_pushinteger(L, store->prekeys[i].id);
     lua_setfield(L, -2, "id");
-    lua_seti(L, -2, ++p);
+    lua_rawseti(L, -2, ++p);
   }
   lua_setfield(L, -2, "prekeys");
   return 1;
 }
 
+static int RefillPreKeys(lua_State *L) {
+  struct omemoStore *store = luaL_checkudata(L, 1, "lomemo.Store");
+  int r = omemoRefillPreKeys(store);
+  if (r) luaL_error(L, "lomemo: refill prekeys failed");
+  return 0;
+}
+
+static int RotateSignedPreKey(lua_State *L) {
+  struct omemoStore *store = luaL_checkudata(L, 1, "lomemo.Store");
+  int r = omemoRotateSignedPreKey(store);
+  if (r) luaL_error(L, "lomemo: rotate signed prekey failed");
+  return 0;
+}
+
 static int EncryptMessage(lua_State *L) {
-  const char *msg = luaL_checkstring(L, 1);
+  size_t msgn;
+  const char *msg = luaL_checklstring(L, 1, &msgn);
   uint8_t iv[12];
   omemoKeyPayload key;
-  size_t msgn = lua_rawlen(L, 1);
   char *enc = Alloc(L, msgn);
   int r = omemoEncryptMessage(enc, key, iv, msg, msgn);
   if (!r) {
@@ -246,20 +289,16 @@ static int EncryptMessage(lua_State *L) {
   } else {
     free(enc);
     lua_pushnil(L);
-    lua_pushstring(L, "omemo: encrypt message failed");
+    lua_pushstring(L, "lomemo: encrypt message failed");
     return 2;
   }
 }
 
 static int DecryptMessage(lua_State *L) {
-  const char *msg = luaL_checkstring(L, 1);
-  const char *key = luaL_checkstring(L, 2);
-  const char *iv = luaL_checkstring(L, 3);
-  size_t msgn = lua_rawlen(L, 1);
-  if (lua_rawlen(L, 2) != sizeof(omemoKeyPayload))
-    luaL_argerror(L, 2, "omemo: key size");
-  if (lua_rawlen(L, 3) != 12)
-    luaL_argerror(L, 3, "omemo: iv size");
+  size_t msgn;
+  const char *msg = luaL_checklstring(L, 1, &msgn);
+  const char *key = CheckLStringFix(2, sizeof(omemoKeyPayload), "key");
+  const char *iv = CheckLStringFix(3, 12, "iv");
   char *dec = Alloc(L, msgn);
   int r = omemoDecryptMessage(dec, key, sizeof(omemoKeyPayload), iv, msg, msgn);
   if (!r) {
@@ -269,7 +308,7 @@ static int DecryptMessage(lua_State *L) {
   } else {
     free(dec);
     lua_pushnil(L);
-    lua_pushstring(L, "omemo: encrypt message failed");
+    lua_pushstring(L, "lomemo: encrypt message failed");
     return 2;
   }
 }
@@ -288,6 +327,8 @@ static const luaL_Reg lib[] = {
 static const luaL_Reg storemt[] = {
   {"Serialize",SerializeStore},
   {"GetBundle",GetBundle},
+  {"RefillPreKeys", RefillPreKeys},
+  {"RotateSignedPreKey", RotateSignedPreKey},
   {NULL,NULL},
 };
 
@@ -298,14 +339,18 @@ static const luaL_Reg sessionmt[] = {
   {NULL,NULL},
 };
 
-static void RegisterMetatable(lua_State *L, const luaL_Reg *reg, const char *name) {
+static void RegisterMetatable(lua_State *L, const luaL_Reg *lib, const char *name) {
   luaL_newmetatable(L, name);
-  luaL_setfuncs(L, reg, 0);
-  lua_setfield(L, -1, "__index");
+  lua_pushliteral(L, "__index");
+  lua_pushvalue(L, -2);
+  lua_rawset(L, -3);
+  luaL_openlib(L, NULL, lib, 0);
+  lua_pop(L, 1);
 }
 
 int luaopen_lomemo(lua_State *L) {
-  luaL_newlib(L, lib);
+  lua_newtable(L);
+  luaL_openlib(L, NULL, lib, 0);
   RegisterMetatable(L, storemt, "lomemo.Store");
   RegisterMetatable(L, sessionmt, "lomemo.Session");
   return 1;
