@@ -2,3 +2,4 @@
 /tags
 /test/bot-venv/
 /example/esp-im/config.h
+/lua/*.so

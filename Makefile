@@ -84,6 +84,16 @@ start-prosody: test/localhost.crt
 stop-prosody:
 	docker-compose -f test/docker-compose.yml down
 
+.PHONY: reset-accounts
+reset-accounts:
+	# using docker instead of docker-compose is way faster
+	docker exec test_prosody_1 sh -c\
+	  'prosodyctl deluser admin@localhost && \
+	   prosodyctl deluser user@localhost && \
+	   prosodyctl register admin localhost adminpass && \
+	   prosodyctl register user  localhost userpass'
+
+
 test/bot-venv/:
 	python -m venv test/bot-venv/
 	./test/bot-venv/bin/pip install slixmpp==1.8.5
