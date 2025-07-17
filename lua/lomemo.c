@@ -38,7 +38,6 @@ const char *(CheckLStringFix)(lua_State *L, int idx, int fix, const char *err) {
   return s;
 }
 
-
 struct Session {
   struct omemoSession s;
   // Wrap so that in Load/Store MessageKey we can callback to Lua
@@ -259,6 +258,7 @@ static int GetBundle(lua_State *L) {
   return 1;
 }
 
+// TODO: do we even want this? it gets automatically refilled
 static int RefillPreKeys(lua_State *L) {
   struct omemoStore *store = luaL_checkudata(L, 1, "lomemo.Store");
   int r = omemoRefillPreKeys(store);
