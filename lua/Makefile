@@ -5,7 +5,7 @@ STORES=../o/store1.bin ../o/store2.bin
 
 all: lomemo.so native.so test
 
-test: lomemo.so native.so $(STORES)
+test: lomemo.so $(STORES)
 	busted --lua=$(LUA)
 
 $(STORES): lomemo.so
@@ -17,9 +17,6 @@ $(STORES): lomemo.so
 lomemo.so: lomemo.c ../omemo.c ../c25519.c
 	cc -shared -o $@ $^ $(CFLAGS) -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
 
-native.so: native.c
-	cc -shared -o $@ $^ $(CFLAGS) -fPIC -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto -lmbedtls -lmbedx509
-
 .PHONY: clean
 clean:
-	rm -f native.so lomemo.so
+	rm -f lomemo.so
