@@ -126,13 +126,14 @@ static void TestCurve25519() {
   TestKeyPair(&kpa, "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a", "70076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c6a", "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a");
   TestKeyPair(&kpb, "58ab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e06b", "58ab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e06b", "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
   CopyHex(expshared, "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
-  CalculateCurveAgreement(shared, kpa.prv, kpb.pub);
+  curve25519(shared, kpa.prv, kpb.pub);
   assert(!memcmp(expshared, shared, 32));
-  CalculateCurveAgreement(shared, kpb.prv, kpa.pub);
+  curve25519(shared, kpb.prv, kpa.pub);
   assert(!memcmp(expshared, shared, 32));
 }
 
 static void TestSignature() {
+#ifndef OMEMO2
   omemoKey prv, pub;
   omemoCurveSignature sig, expsig;
   uint8_t msg[12];
@@ -144,10 +145,11 @@ static void TestSignature() {
   CopyHex(expsig, "2bc06c745acb8bae10fbc607ee306084d0c28e2b3bb819133392"
                   "473431291fd0dfa9c7f11479996cf520730d2901267387e08d85"
                   "bbf2af941590e3035a545285");
-  assert(c25519_verify(expsig, pub, msg, 12));
+  assert(VerifySignature(expsig, pub, msg, 12));
 
-  assert(!c25519_sign(sig, prv, msg, 12));
-  assert(c25519_verify(sig, pub, msg, 12));
+  assert(!CalculateCurveSignature(sig, prv, msg, 12));
+  assert(VerifySignature(sig, pub, msg, 12));
+#endif
 }
 
 // This would in reality parse the bundle's XML instead of their store.
@@ -340,9 +342,9 @@ static int GetSharedSecretWithoutPreKey(omemoKey rk, omemoKey ck, bool isbob, om
   uint8_t secret[32*4] = {0}, salt[32];
   memset(secret, 0xff, 32);
   // When we are bob, we must swap the first two.
-  CalculateCurveAgreement(secret+32, isbob ? ska : ika, isbob ? ikb : spkb);
-  CalculateCurveAgreement(secret+64, isbob ? ika : ska, isbob ? spkb : ikb);
-  CalculateCurveAgreement(secret+96, ska, spkb);
+  curve25519(secret+32, isbob ? ska : ika, isbob ? ikb : spkb);
+  curve25519(secret+64, isbob ? ika : ska, isbob ? spkb : ikb);
+  curve25519(secret+96, ska, spkb);
   memset(salt, 0, 32);
   uint8_t full[64];
   if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, 32, secret, sizeof(secret), "WhisperText", 11, full, 64) != 0)

@@ -1,5 +1,6 @@
-CFLAGS+= -g -std=c99 -Wall -Wno-pointer-sign -fmax-errors=4 -I. \
-		 -Wno-unused
+CFLAGS+= -g -std=c99 -Wall -Wno-pointer-sign -I.
+
+LAXCFLAGS=-g -Wall -Wno-pointer-sign -I. -Wno-unused
 
 all: o/test o/im o/test-omemo
 
@@ -15,11 +16,21 @@ o/test: o/xmpp.o test/cacert.inc test/xmpp.c
 o/test-omemo: test/omemo.c omemo.c c25519.c omemo.h | o
 	$(CC) -o $@ c25519.c test/omemo.c $(CFLAGS) -lmbedcrypto
 
+o/test-omemo2: test/omemo.c omemo.c c25519.c omemo.h | o
+	$(CC) -o $@ c25519.c test/omemo.c -DOMEMO2 $(CFLAGS) -lmbedcrypto
+
 o/im: o/xmpp.o example/im.c test/cacert.inc omemo.c c25519.c omemo.h
 	$(CC) -o $@ example/im.c example/yxml.c omemo.c c25519.c o/xmpp.o $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
 
 o/generatestore: test/generatestore.c omemo.c c25519.c omemo.h | o
 	$(CC) -o $@ c25519.c omemo.c test/generatestore.c $(CFLAGS) -lmbedcrypto
+
+o/python-host: test/python-host.c omemo.c c25519.c omemo.h | o
+	$(CC) -o $@ c25519.c omemo.c test/python-host.c $(LAXCFLAGS) -lmbedcrypto
+
+.PHONY: test-python
+test-python: o/python-host
+	./o/python-host
 
 test/localhost.crt:
 	openssl req -new -x509 -key test/localhost.key -out $@ -days 3650 -config test/localhost.cnf
@@ -65,6 +76,10 @@ test: o/test
 .PHONY: test-omemo
 test-omemo: o/test-omemo
 	./o/test-omemo
+
+.PHONY: test-omemo2
+test-omemo2: o/test-omemo2
+	./o/test-omemo2
 
 define IM_INPUT
 /login admin@localhost

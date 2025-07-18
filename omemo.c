@@ -226,6 +226,7 @@ static size_t FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE], uint
   return p - d;
 }
 
+#ifndef OMEMO2
 static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
   struct ed25519_pt p;
   ed25519_smult(&p, &ed25519_base, prv);
@@ -234,8 +235,16 @@ static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
   ed25519_unproject(x, y, &p);
   ed25519_pack(ed, x, y);
 }
+#endif
 
-static int c25519_sign(omemoCurveSignature sig, const omemoKey prv, const uint8_t *msg, size_t msgn) {
+static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey prv, const uint8_t *msg, size_t msgn) {
+#ifdef OMEMO2
+  omemoKey pub;
+  // TODO: can we use idkp->pub instead of converting here?
+  edsign_sec_to_pub(pub, prv);
+  edsign_sign(sig, pub, prv, msg, msgn);
+  return 0;
+#else
   assert(msgn <= 33);
   omemoKey ed;
   uint8_t msgbuf[33+64];
@@ -248,9 +257,11 @@ static int c25519_sign(omemoCurveSignature sig, const omemoKey prv, const uint8_
   sig[63] &= 0x7f;
   sig[63] |= sign;
   return 0;
+#endif
 }
 
-static bool c25519_verify(const omemoCurveSignature sig, const omemoKey pub, const uint8_t *msg, size_t msgn) {
+//  Sig(PK, M)
+static bool VerifySignature(const omemoCurveSignature sig, const omemoKey pub, const uint8_t *msg, size_t msgn) {
 #ifdef OMEMO2
   // TODO: pub is bundle->ik in ed25519 form, we might still have to force a sign bit
   return !!edsign_verify(sig, pub, msg, msgn);
@@ -279,7 +290,11 @@ static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
   memset(kp, 0, sizeof(*kp));
   TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
   ed25519_prepare(kp->prv);
-  ed25519_smult(kp->pub, kp->prv, ed25519_base);
+  struct ed25519_pt p;
+  uint8_t x[32],y[32];
+  ed25519_smult(&p, &ed25519_base, kp->prv);
+  ed25519_unproject(x, y, &p);
+  ed25519_pack(kp->pub, x, y);
   return 0;
 }
 #endif
@@ -287,29 +302,6 @@ static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
 static int GeneratePreKey(struct omemoPreKey *pk, uint32_t id) {
   pk->id = id;
   return GenerateKeyPair(&pk->kp);
-}
-
-
-static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey signprv,
-                                    const uint8_t *msg, size_t n) {
-  assert(n <= 33);
-#ifdef OMEMO2
-  omemoKey pub;
-  // TODO: can we use idkp->pub instead of converting here?
-  edsign_sec_to_pub(pub, signprv);
-  return edsign_sign(sign, pub, signprv, msg, n);
-#else
-  uint8_t rnd[sizeof(omemoCurveSignature)];
-  TRY(omemoRandom(rnd, sizeof(rnd)));
-  return c25519_sign(sig, signprv, msg, n);
-#endif
-}
-
-//  DH(dh_pair, dh_pub)
-static void CalculateCurveAgreement(uint8_t d[static 32], const omemoKey prv,
-                                    const omemoKey pub) {
-
-  curve25519(d, prv, pub);
 }
 
 static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
@@ -321,12 +313,6 @@ static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
   omemoSerializeKey(ser, spk->kp.pub);
   return CalculateCurveSignature(spk->sig, idkp->prv, ser,
                           sizeof(omemoSerializedKey));
-}
-
-//  Sig(PK, M)
-static bool VerifySignature(const omemoCurveSignature sig, const omemoKey sk,
-                            const uint8_t *msg, size_t n) {
-  return c25519_verify(sig, sk, msg, n);
 }
 
 static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
@@ -493,7 +479,7 @@ int omemoEncryptKey(struct omemoSession *session, const struct omemoStore *store
 // RK, ck = KDF_RK(RK, DH(DHs, DHr))
 static int DeriveRootKey(struct omemoState *state, omemoKey ck) {
   uint8_t secret[32], masterkey[64];
-  CalculateCurveAgreement(secret, state->dhs.prv, state->dhr);
+  curve25519(secret, state->dhs.prv, state->dhr);
   if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
                       state->rk, 32, secret, sizeof(secret),
                       HkdfInfoRootChain, 14, masterkey, 64) != 0)
@@ -513,11 +499,11 @@ static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika, const om
   uint8_t secret[32*5] = {0}, salt[32];
   memset(secret, 0xff, 32);
   // When we are bob, we must swap the first two.
-  CalculateCurveAgreement(secret+32, isbob ? ska : ika, isbob ? ikb : spkb);
-  CalculateCurveAgreement(secret+64, isbob ? ika : ska, isbob ? spkb : ikb);
-  CalculateCurveAgreement(secret+96, ska, spkb);
+  curve25519(secret+32, isbob ? ska : ika, isbob ? ikb : spkb);
+  curve25519(secret+64, isbob ? ika : ska, isbob ? spkb : ikb);
+  curve25519(secret+96, ska, spkb);
   // OMEMO mandates that the bundle MUST contain a prekey.
-  CalculateCurveAgreement(secret+128, eka, opkb);
+  curve25519(secret+128, eka, opkb);
   memset(salt, 0, 32);
   if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, 32, secret, sizeof(secret), HkdfInfoKeyExchange, 11, sk, 32) != 0)
     return OMEMO_ECRYPTO;
