@@ -50,6 +50,19 @@ enum {
   SESSION_READY,
 };
 
+#define SerLen sizeof(omemoSerializedKey)
+
+void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
+#ifdef OMEMO2
+  memcpy(k, pub, SerLen);
+#else
+  k[0] = 5;
+  memcpy(k + 1, pub, SerLen - 1);
+#endif
+}
+
+/***************************** PROTOBUF ******************************/
+
 // Protobuf: https://protobuf.dev/programming-guides/encoding/
 
 // Only supports uint32 and len prefixed (by int32).
@@ -144,6 +157,36 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
   return false;
 }
 
+// TODO: can we incorporate this in ParseProtobuf?
+static bool ParseRepeatingField(const uint8_t *s, size_t n,
+                         struct ProtobufField *field, int fieldid) {
+  int type, id;
+  uint32_t v;
+  const uint8_t *e = s + n;
+  assert(fieldid <= 16);
+  while (s < e) {
+    type = *s & 7;
+    id = *s >> 3;
+    s++;
+    if (id >= 16 || (id == fieldid && type != (field->type & 7)))
+      return true;
+    if (!(s = ParseVarInt(s, e, &v)))
+      return true;
+    if (id == fieldid)
+      field->v = v;
+    if (type == PB_LEN) {
+      if (id == fieldid)
+        field->p = s;
+      s += v;
+    }
+    if (id == fieldid)
+      break;
+  }
+  if (s > e)
+    return true;
+  return false;
+}
+
 /**
  * Get the size of a properly formatted varint in bytes.
  */
@@ -163,11 +206,7 @@ static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id, uint32_t v) 
   return d;
 }
 
-void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
-  k[0] = 5;
-  memcpy(k + 1, pub, sizeof(omemoSerializedKey) - 1);
-}
-
+#ifndef OMEMO2
 static uint8_t *FormatKey(uint8_t d[35], int id, const omemoKey k) {
   assert(id < 16);
   *d++ = (id << 3) | PB_LEN;
@@ -175,6 +214,9 @@ static uint8_t *FormatKey(uint8_t d[35], int id, const omemoKey k) {
   omemoSerializeKey(d, k);
   return d + 33;
 }
+#else
+#define FormatKey FormatPrivateKey
+#endif
 
 static uint8_t *FormatPrivateKey(uint8_t d[34], int id, const omemoKey k) {
   assert(id < 16);
@@ -197,7 +239,6 @@ static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE]
   p = FormatVarInt(p, PB_UINT32, 2, spk_id);
   p = FormatKey(p, 3, ik);
   p = FormatKey(p, 4, ek);
-  assert(msgsz <= 0x7f);
   p = FormatVarInt(p, PB_LEN, 5, msgsz);
 #else
   *p++ = (3 << 4) | 3;
@@ -206,7 +247,6 @@ static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE]
   p = FormatVarInt(p, PB_UINT32, 6, spk_id);
   p = FormatKey(p, 3, ik);
   p = FormatKey(p, 2, ek);
-  assert(msgsz <= 0x7f);
   p = FormatVarInt(p, PB_LEN, 4, msgsz);
 #endif
   return p - d;
@@ -225,6 +265,8 @@ static size_t FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE], uint
   *p++ = OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
   return p - d;
 }
+
+/*************************** CRYPTOGRAPHY ****************************/
 
 #ifndef OMEMO2
 static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
@@ -264,6 +306,13 @@ static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey prv, 
 static bool VerifySignature(const omemoCurveSignature sig, const omemoKey pub, const uint8_t *msg, size_t msgn) {
 #ifdef OMEMO2
   // TODO: pub is bundle->ik in ed25519 form, we might still have to force a sign bit
+  //omemoKey ed;
+  //memcpy(ed, pub, 32);
+  //ed[31] &= 0x7f;
+  //ed[31] |= sig[63] & 0x80;
+  //omemoCurveSignature sig2;
+  //memcpy(sig2, sig, 64);
+  //sig2[63] &= 0x7f;
   return !!edsign_verify(sig, pub, msg, msgn);
 #else
   omemoKey ed;
@@ -312,8 +361,10 @@ static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
   TRY(GenerateKeyPair(&spk->kp));
   omemoSerializeKey(ser, spk->kp.pub);
   return CalculateCurveSignature(spk->sig, idkp->prv, ser,
-                          sizeof(omemoSerializedKey));
+                          SerLen);
 }
+
+/****************************** STORE ********************************/
 
 static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
   n++;
@@ -354,10 +405,14 @@ int omemoSetupStore(struct omemoStore *store) {
   return r;
 }
 
+/*********************************************************************/
+
+#define ADSIZE (2*SerLen)
+
 //  AD = Encode(IKA) || Encode(IKB)
-static void GetAd(uint8_t ad[static 66], const omemoKey ika, const omemoKey ikb) {
-  omemoSerializeKey(ad, ika);
-  omemoSerializeKey(ad + 33, ikb);
+static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika, const omemoKey ikb) {
+  omemoSerializeKey(ad,          ika);
+  omemoSerializeKey(ad + SerLen, ikb);
 }
 
 static int GetMac(uint8_t d[static 8], const omemoKey ika,
@@ -367,11 +422,11 @@ static int GetMac(uint8_t d[static 8], const omemoKey ika,
   // is needlessly large.
   if (msgn > OMEMO_INTERNAL_FULLMSG_MAXSIZE)
     return OMEMO_ECORRUPT;
-  uint8_t macinput[66 + OMEMO_INTERNAL_FULLMSG_MAXSIZE], mac[32];
+  uint8_t macinput[ADSIZE + OMEMO_INTERNAL_FULLMSG_MAXSIZE], mac[32];
   GetAd(macinput, ika, ikb);
-  memcpy(macinput + 66, msg, msgn);
+  memcpy(macinput + ADSIZE, msg, msgn);
   if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), mk,
-                      32, macinput, 66 + msgn, mac) != 0)
+                      32, macinput, ADSIZE + msgn, mac) != 0)
     return OMEMO_ECRYPTO;
   // TODO: OMEMO2 truncate to 16 bytes
   memcpy(d, mac, 8);
@@ -534,7 +589,7 @@ int omemoInitFromBundle(struct omemoSession *session, const struct omemoStore *s
   omemoSerializedKey serspk;
   omemoSerializeKey(serspk, bundle->spk);
   if (!VerifySignature(bundle->spks, bundle->ik, serspk,
-                       sizeof(omemoSerializedKey))) {
+                       SerLen)) {
     return OMEMO_ESIG;
   }
   struct omemoKeyPair eka;
@@ -779,7 +834,7 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
     // function for both decrypting prekey and non-prekey where that get
     // done automatically.
     memset(pk, 0, sizeof(*pk));
-    omemoRefillPreKeys(store);
+    return omemoRefillPreKeys(store);
   }
   return r;
 }
@@ -796,6 +851,8 @@ int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omem
   }
   return 0;
 }
+
+/******************** MESSAGE CONTENT ENCRYPTION *********************/
 
 int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n) {
   int r = 0;
@@ -823,35 +880,7 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
   return r ? OMEMO_ECRYPTO : 0;
 }
 
-// TODO: can we incorporate this in ParseProtobuf?
-static bool ParseRepeatingField(const uint8_t *s, size_t n,
-                         struct ProtobufField *field, int fieldid) {
-  int type, id;
-  uint32_t v;
-  const uint8_t *e = s + n;
-  assert(fieldid <= 16);
-  while (s < e) {
-    type = *s & 7;
-    id = *s >> 3;
-    s++;
-    if (id >= 16 || (id == fieldid && type != (field->type & 7)))
-      return true;
-    if (!(s = ParseVarInt(s, e, &v)))
-      return true;
-    if (id == fieldid)
-      field->v = v;
-    if (type == PB_LEN) {
-      if (id == fieldid)
-        field->p = s;
-      s += v;
-    }
-    if (id == fieldid)
-      break;
-  }
-  if (s > e)
-    return true;
-  return false;
-}
+/************************** SERIALIZATION ****************************/
 
 size_t omemoGetSerializedStoreSize(const struct omemoStore *store) {
   size_t sum = 34 * 3 + 35 * 3 + (2 + 64) * 2 + 1 * 4 +

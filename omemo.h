@@ -43,7 +43,11 @@
 #endif
 
 typedef uint8_t omemoKey[32];
+#ifdef OMEMO2
+typedef uint8_t omemoSerializedKey[32];
+#else
 typedef uint8_t omemoSerializedKey[1+32];
+#endif
 typedef uint8_t omemoCurveSignature[64];
 
 struct omemoKeyPair {
