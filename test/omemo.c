@@ -175,10 +175,13 @@ static void ParseBundle(struct omemoBundle *bundle, struct omemoStore *store) {
 static void TestEncryption() {
   const uint8_t *msg = "Hello there!";
   size_t n = strlen(msg);
-  uint8_t encrypted[100], decrypted[100], iv[12];
+  uint8_t encrypted[100], decrypted[100];
+  omemoKeyIv iv;
+  strcpy(decrypted, msg);
   omemoKeyPayload payload;
-  assert(!omemoEncryptMessage(encrypted, payload, iv, msg, n));
-  assert(!omemoDecryptMessage(decrypted, payload, sizeof(omemoKeyPayload), iv, encrypted, n));
+  assert(!omemoEncryptMessage(encrypted, payload, iv, decrypted, n));
+  memset(decrypted, 0, sizeof(decrypted));
+  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(omemoKeyPayload), iv, encrypted, n+omemoGetMessagePadSize(n)));
   assert(!memcmp(msg, decrypted, n));
 }
 
@@ -316,7 +319,7 @@ static void TestDeriveChainKey() {
   assert(!GetBaseMaterials(myck, mymk, seed));
   assert(!memcmp(ck, myck, 32));
   struct DeriveChainKeyOutput out;
-  assert(!DeriveChainKey(&out, mymk));
+  assert(!DeriveChainKey(&out, mymk, HkdfInfoMessageKeys, sizeof(HkdfInfoMessageKeys)-1));
   assert(!memcmp(mk, out.cipher, 32));
   assert(!memcmp(mac, out.mac, 32));
 }

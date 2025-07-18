@@ -30,8 +30,16 @@
 #define OMEMO_EKEYGONE  (-6)
 #define OMEMO_EUSER     (-7)
 
+// TODO: these are all different for OMEMO2
+#ifdef OMEMO2
+#define OMEMO_INTERNAL_IV_SIZE 16
+#define OMEMO_INTERNAL_PAYLOAD_SIZE 48
+#define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
+#else
+#define OMEMO_INTERNAL_IV_SIZE 12
 #define OMEMO_INTERNAL_PAYLOAD_SIZE 32
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 48
+#endif
 #define OMEMO_INTERNAL_HEADER_MAXSIZE (2+33+2*6+2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE (1+OMEMO_INTERNAL_HEADER_MAXSIZE+OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE)
 #define OMEMO_INTERNAL_ENCRYPTED_MAXSIZE (OMEMO_INTERNAL_FULLMSG_MAXSIZE+8)
@@ -40,6 +48,12 @@
 #define OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE (18+35*2+2)
 #else
 #define OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE (1+18+35*2+2)
+#endif
+
+#ifdef OMEMO2
+#define omemoGetMessagePadSize(n) (16-(n%16))
+#else
+#define omemoGetMessagePadSize(n) 0
 #endif
 
 typedef uint8_t omemoKey[32];
@@ -79,9 +93,8 @@ struct omemoState {
   uint32_t ns, nr, pn;
 };
 
-// [        16        |   16  ]
-//  GCM encryption key GCM tag
 typedef uint8_t omemoKeyPayload[OMEMO_INTERNAL_PAYLOAD_SIZE];
+typedef uint8_t omemoKeyIv[OMEMO_INTERNAL_IV_SIZE];
 
 struct omemoKeyMessage {
   uint8_t p[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE+OMEMO_INTERNAL_ENCRYPTED_MAXSIZE];
@@ -217,7 +230,7 @@ int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omem
  * @param n is the size of the buffer in d and s
  */
 int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
-                               uint8_t iv[12], const uint8_t *s,
+                               omemoKeyIv iv, uint8_t *s,
                                size_t n);
 
 /**
@@ -227,6 +240,6 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
  * @param pn is the size of payload, some clients might make the tag larger than 16 bytes
  * @param n is the size of the buffer in d and s
  */
-int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n);
+int omemoDecryptMessage(uint8_t *d, size_t *outn, const uint8_t *payload, size_t pn, const omemoKeyIv iv, const uint8_t *s, size_t n);
 
 #endif

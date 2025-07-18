@@ -30,11 +30,12 @@
 #ifdef OMEMO2
 #define HkdfInfoKeyExchange "OMEMO X3DH"
 #define HkdfInfoRootChain   "OMEMO Root Chain"
+#define HkdfInfoMessageKeys "OMEMO Message Key Material"
 #define HkdfInfoPayload     "OMEMO Payload"
 #else
 #define HkdfInfoKeyExchange "WhisperText"
 #define HkdfInfoRootChain   "WhisperRatchet"
-#define HkdfInfoPayload     "WhisperMessageKeys"
+#define HkdfInfoMessageKeys "WhisperMessageKeys"
 #endif
 
 #define TRY(expr) \
@@ -226,6 +227,8 @@ static uint8_t *FormatKey(uint8_t d[34], int id, const omemoKey k) {
 
 // Format Protobuf PreKeyWhisperMessage without message (it should be
 // appended right after this call).
+// This is OMEMOMessage in schema
+// NOTE: OMEMO2 COMPLIANT
 static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
                                   uint32_t pk_id, uint32_t spk_id,
                                   const omemoKey ik, const omemoKey ek,
@@ -403,6 +406,11 @@ int omemoSetupStore(struct omemoStore *store) {
 /*********************************************************************/
 
 #define ADSIZE (2*SerLen)
+#ifdef OMEMO2
+#define MACSIZE 16
+#else
+#define MACSIZE 8
+#endif
 
 //  AD = Encode(IKA) || Encode(IKB)
 static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika, const omemoKey ikb) {
@@ -410,7 +418,7 @@ static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika, const omemoKey 
   omemoSerializeKey(ad + SerLen, ikb);
 }
 
-static int GetMac(uint8_t d[static 8], const omemoKey ika,
+static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
                   const omemoKey ikb, const omemoKey mk,
                   const uint8_t *msg, size_t msgn) {
   // This could theoretically happen while decrypting when the protobuf
@@ -424,7 +432,7 @@ static int GetMac(uint8_t d[static 8], const omemoKey ika,
                       32, macinput, ADSIZE + msgn, mac) != 0)
     return OMEMO_ECRYPTO;
   // TODO: OMEMO2 truncate to 16 bytes
-  memcpy(d, mac, 8);
+  memcpy(d, mac, MACSIZE);
   return 0;
 }
 
@@ -457,13 +465,12 @@ struct __attribute__((__packed__)) DeriveChainKeyOutput {
   uint8_t iv[16];
 };
 
-static int DeriveChainKey(struct DeriveChainKeyOutput *out, const omemoKey ck) {
+static int DeriveChainKey(struct DeriveChainKeyOutput *out, const omemoKey ck, uint8_t *info, size_t infon) {
   uint8_t salt[32];
   memset(salt, 0, 32);
   assert(sizeof(struct DeriveChainKeyOutput) == 80);
   if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
-                      salt, 32, ck, 32, HkdfInfoPayload,
-                      sizeof(HkdfInfoPayload)-1, (uint8_t *)out,
+                      salt, 32, ck, 32, info, infon, (uint8_t *)out,
                       sizeof(struct DeriveChainKeyOutput)))
     return OMEMO_ECRYPTO;
   return 0;
@@ -494,12 +501,14 @@ static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore 
   omemoKey mk;
   TRY(GetBaseMaterials(session->state.cks, mk, session->state.cks));
   struct DeriveChainKeyOutput kdfout;
-  TRY(DeriveChainKey(&kdfout, mk));
+  TRY(DeriveChainKey(&kdfout, mk, HkdfInfoMessageKeys, sizeof(HkdfInfoMessageKeys)-1));
   msg->n = FormatMessageHeader(msg->p, session->state.ns, session->state.pn, session->state.dhs.pub);
   TRY(Encrypt(msg->p+msg->n, payload, kdfout.cipher, kdfout.iv));
   msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
+#ifndef OMEMO2
   TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout.mac, msg->p, msg->n));
   msg->n += 8;
+#endif
   session->state.ns++;
   if (session->fsm == SESSION_INIT) {
     msg->isprekey = true;
@@ -755,11 +764,13 @@ static int DecryptKeyImpl(struct omemoSession *session,
     session->state.nr++;
   }
   struct DeriveChainKeyOutput kdfout;
-  TRY(DeriveChainKey(&kdfout, mk));
-  uint8_t mac[8];
+  TRY(DeriveChainKey(&kdfout, mk, HkdfInfoMessageKeys, sizeof(HkdfInfoMessageKeys)-1));
+  uint8_t mac[MACSIZE];
+#ifndef OMEMO2
   TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout.mac, msg, msgn-8));
   if (memcmp(mac, msg+msgn-8, 8))
     return OMEMO_ECORRUPT;
+#endif
   uint8_t tmp[48];
   TRY(Decrypt(tmp, fields[4].p, fields[4].v, kdfout.cipher, kdfout.iv));
   memcpy(decrypted, tmp, 32);
@@ -864,7 +875,30 @@ int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omem
 
 /******************** MESSAGE CONTENT ENCRYPTION *********************/
 
-int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n) {
+// TODO: for OMEMO2 we're not using the iv, so we could make a separate function without iv argument and with olen
+int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t pn, const omemoKeyIv iv, const uint8_t *s, size_t n) {
+#ifdef OMEMO2
+  if (pn != 48) return OMEMO_ECORRUPT;
+  if (n < 16 || n % 16) return OMEMO_ECORRUPT;
+  struct DeriveChainKeyOutput kdfout;
+  TRY(DeriveChainKey(&kdfout, payload, HkdfInfoPayload, sizeof(HkdfInfoPayload)-1));
+  uint8_t mac[32];
+  // TODO: this should always return 0, we can assert
+  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout.mac, 32, s, n, mac) != 0)
+    return OMEMO_ECRYPTO;
+  if (memcmp(mac, payload+32, 16))
+    return OMEMO_ESIG; // TODO: have new error code for this?
+  mbedtls_aes_context aes;
+  if (mbedtls_aes_setkey_dec(&aes, kdfout.cipher, 256) ||
+  mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, n,
+                               kdfout.iv, s, d))
+    return OMEMO_ECRYPTO;
+  uint8_t p = d[n-1];
+  if (p > n) return OMEMO_ECORRUPT;
+  memset(d-p, 0, p);
+  *olen = n-p;
+  return 0;
+#else
   int r = 0;
   if (pn < 32)
     return OMEMO_ECORRUPT;
@@ -873,11 +907,36 @@ int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uin
   if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, payload, 128)))
     r = mbedtls_gcm_auth_decrypt(&ctx, n, iv, 12, "", 0, payload+16, pn-16, s, d);
   mbedtls_gcm_free(&ctx);
+  *olen = n;
   return r ? OMEMO_ECRYPTO : 0;
+#endif
 }
 
 int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
-                        uint8_t iv[12], const uint8_t *s, size_t n) {
+                        omemoKeyIv iv, uint8_t *s, size_t n) {
+#ifdef OMEMO2
+  TRY(omemoRandom(payload, 32));
+  // Reusing DeriveChainKey
+  struct DeriveChainKeyOutput kdfout;
+  TRY(DeriveChainKey(&kdfout, payload, HkdfInfoPayload, sizeof(HkdfInfoPayload)-1));
+  // PKCS#7
+  // TODO: describe how buffer `s` must be of n+extend size
+  size_t extend = omemoGetMessagePadSize(n);
+  memset(s+n, extend, extend);
+  mbedtls_aes_context aes;
+  if (mbedtls_aes_setkey_enc(&aes, kdfout.cipher, 256)
+   || mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, n+extend,
+                               kdfout.iv, s, d))
+    return OMEMO_ECRYPTO;
+  uint8_t mac[32];
+  // TODO: this should always return 0, we can assert
+  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout.mac,
+                      32, d, n+extend, mac) != 0)
+    return OMEMO_ECRYPTO;
+  memcpy(payload+32, mac, 16);
+  memcpy(iv, kdfout.iv, 16);
+  return 0;
+#else
   int r = 0;
   if ((r = omemoRandom(payload, 16))
    || (r = omemoRandom(iv, 12)))
@@ -888,6 +947,7 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
     r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, iv, 12, "", 0, s, d, 16, payload+16);
   mbedtls_gcm_free(&ctx);
   return r ? OMEMO_ECRYPTO : 0;
+#endif
 }
 
 /************************** SERIALIZATION ****************************/

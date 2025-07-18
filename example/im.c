@@ -427,7 +427,7 @@ static void ParseEncryptedMessage(struct xmppParser *parser, const struct xmppXm
     DecodeBase64(&payload, &payloadsz, &payloadslc);
     decryptedpayload = Malloc(payloadsz+1);
     decryptedpayload[payloadsz] = 0;
-    r = omemoDecryptMessage(decryptedpayload, decryptedkey, sizeof(omemoKeyPayload), iv, payload, payloadsz);
+    r = omemoDecryptMessage(decryptedpayload, &payloadsz, decryptedkey, sizeof(omemoKeyPayload), iv, payload, payloadsz);
     if (r < 0) {
       LogWarn("Message decryption error: %d", r);
       goto free;
@@ -713,7 +713,7 @@ static bool IterateClient() {
 static void SendNormalOmemo(const char *msg) {
   size_t msgn = strlen(msg);
   char *payload = Malloc(msgn);
-  char iv[12];
+  omemoKeyIv iv;
   omemoKeyPayload encryptionkey;
   int r = omemoEncryptMessage(payload, encryptionkey, iv, msg, msgn);
   if (r < 0) {
@@ -738,7 +738,7 @@ static void SendNormalOmemo(const char *msg) {
 "<encryption xmlns='urn:xmpp:eme:0' name='OMEMO' namespace='eu.siacs.conversations.axolotl'/><body>You received a message encrypted with OMEMO but your client doesn't support OMEMO.</body>"
 "<request xmlns='urn:xmpp:receipts'/><markable xmlns='urn:xmpp:chat-markers:0'/>"
       "<store xmlns='urn:xmpp:hints'/></message>",
-      remotejid.localp, remotejid.domainp, RandomInt(), deviceid, encrypted.isprekey, remoteid, encrypted.n, encrypted.p, 12, iv, msgn,
+      remotejid.localp, remotejid.domainp, RandomInt(), deviceid, encrypted.isprekey, remoteid, encrypted.n, encrypted.p, sizeof(iv), iv, msgn,
       payload);
 }
 
