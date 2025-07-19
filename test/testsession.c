@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
 
 #include "omemo.h"
 
@@ -18,7 +19,10 @@ int main() {
   fclose(f);
 
   omemoKeyPayload payload;
-  printf("%d\n", omemoDecryptKey(&session, &st, payload, true, buf, n));
+  assert(!omemoDecryptKey(&session, &st, payload, true, buf, n));
 
-  for (int i = 0;i < sizeof(payload);i++) printf("%0x", payload[i]);
+  uint8_t exp[32];
+  memset(exp,    0x55, 16);
+  memset(exp+16, 0xaa, 16);
+  assert(!memcmp(exp, payload, 32));
 }
