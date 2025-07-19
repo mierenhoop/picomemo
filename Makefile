@@ -25,12 +25,13 @@ o/im: o/xmpp.o example/im.c test/cacert.inc omemo.c c25519.c omemo.h
 o/generatestore: test/generatestore.c omemo.c c25519.c omemo.h | o
 	$(CC) -o $@ c25519.c omemo.c test/generatestore.c $(CFLAGS) -lmbedcrypto
 
-o/python-host: test/python-host.c omemo.c c25519.c omemo.h | o
-	$(CC) -o $@ c25519.c omemo.c test/python-host.c $(LAXCFLAGS) -lmbedcrypto
-
-.PHONY: test-python
-test-python: o/python-host
-	./o/python-host
+.PHONY: test-session
+test-session: test/generatebundle.c test/initsession.py test/store.inc | o test/bot-venv
+	$(CC) -o o/generatebundle c25519.c omemo.c test/generatebundle.c $(CFLAGS) -lmbedcrypto
+	$(CC) -o o/testsession c25519.c omemo.c test/testsession.c $(CFLAGS) -lmbedcrypto
+	./o/generatebundle
+	./test/bot-venv/bin/python test/initsession.py
+	./o/testsession
 
 test/localhost.crt:
 	openssl req -new -x509 -key test/localhost.key -out $@ -days 3650 -config test/localhost.cnf

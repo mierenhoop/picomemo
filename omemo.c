@@ -835,7 +835,7 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
       return OMEMO_ECORRUPT;
     // PreKeyWhisperMessage
     struct ProtobufField fields[7] = {
-      [5] = {PB_REQUIRED | PB_UINT32}, // registrationid
+      [5] = {PB_UINT32}, // registrationid
       [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32}, // prekeyid
       [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32}, // signedprekeyid
       [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen}, // basekey/ek
@@ -898,7 +898,7 @@ int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omem
     memcpy(&session->state, &backup, sizeof(struct omemoState));
     memset(payload, 0, OMEMO_INTERNAL_PAYLOAD_SIZE);
   }
-  return 0;
+  return r;
 }
 
 /******************** MESSAGE CONTENT ENCRYPTION *********************/

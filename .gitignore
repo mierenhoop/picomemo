@@ -3,3 +3,4 @@
 /test/bot-venv/
 /example/esp-im/config.h
 /lua/*.so
+__pycache__
