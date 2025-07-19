@@ -4,7 +4,11 @@
 #include "omemo.h"
 
 #include "test/defaultcallbacks.inc"
+#ifdef OMEMO2
+#include "test/store2.inc"
+#else
 #include "test/store.inc"
+#endif
 
 FILE *f;
 
@@ -21,7 +25,11 @@ void PrintSer(omemoKey k) {
 }
 
 int main() {
+#ifdef OMEMO2
+  f=fopen("test/bundle2.py", "w");
+#else
   f=fopen("test/bundle.py", "w");
+#endif
   assert(f);
   struct omemoStore st;
   omemoDeserializeStore(store_inc, store_inc_len, &st);

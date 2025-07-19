@@ -4,12 +4,15 @@ OMEMOSRCS=c25519.c omemo.c
 XMPPSRCS=example/xmpp.c example/yxml.c
 IMSRCS=example/im.c
 
+# TODO: move generatebundle & generatestore to Lua
 ALLBINS=o/test-xmpp \
 		o/test-omemo \
 		o/test-omemo2 \
 		o/im \
 		o/generatestore \
-		o/generatebundle
+		o/generatestore2 \
+		o/generatebundle \
+		o/generatebundle2
 
 DEPS=$(ALLBINS:%=%.d)
 
@@ -23,14 +26,14 @@ $(ALLBINS): | o
 o:
 	mkdir -p o
 
-o/test-xmpp: test/xmpp.c example/yxml.c | example/xmpp.c test/cacert.inc
-	$(CC) -o $@ $^ $(CFLAGS) -Iexample -lmbedcrypto -lmbedtls -lmbedx509
+o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
+	$(CC) -o $@ test/xmpp.c example/yxml.c  $(CFLAGS) -Iexample -lmbedcrypto -lmbedtls -lmbedx509
 
-o/test-omemo: test/omemo.c c25519.c | omemo.c o/msg.bin
-	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
+o/test-omemo: test/omemo.c c25519.c omemo.c o/msg.bin
+	$(CC) -o $@ test/omemo.c c25519.c $(CFLAGS) -lmbedcrypto
 
-o/test-omemo2: test/omemo.c c25519.c | omemo.c
-	$(CC) -o $@ $^ $(CFLAGS) -DOMEMO2 -lmbedcrypto
+o/test-omemo2: test/omemo.c c25519.c omemo.c o/msg2.bin
+	$(CC) -o $@ test/omemo.c c25519.c $(CFLAGS) -DOMEMO2 -lmbedcrypto
 
 o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | test/store.inc test/cacert.inc
 	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
@@ -38,14 +41,26 @@ o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | test/store.inc test/cacert.inc
 o/generatestore: test/generatestore.c $(OMEMOSRCS) | test/defaultcallbacks.inc
 	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
 
+o/generatestore2: test/generatestore.c $(OMEMOSRCS) | test/defaultcallbacks.inc
+	$(CC) -o $@ $^ $(CFLAGS) -DOMEMO2 -lmbedcrypto
+
 o/generatebundle: test/generatebundle.c $(OMEMOSRCS) | test/defaultcallbacks.inc test/store.inc
 	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
+
+o/generatebundle2: test/generatebundle.c $(OMEMOSRCS) | test/defaultcallbacks.inc test/store2.inc
+	$(CC) -o $@ $^ $(CFLAGS) -DOMEMO2 -lmbedcrypto
 
 test/bundle.py: o/generatebundle
 	./o/generatebundle
 
+test/bundle2.py: o/generatebundle2
+	./o/generatebundle2
+
 o/msg.bin: test/initsession.py test/bundle.py | test/bot-venv/
 	./test/bot-venv/bin/python test/initsession.py
+
+o/msg2.bin: test/initsession.py test/bundle2.py | test/bot-venv/
+	OMEMO2= ./test/bot-venv/bin/python test/initsession.py
 
 test/localhost.crt:
 	openssl req -new -x509 -key test/localhost.key -out $@ -days 3650 -config test/localhost.cnf
@@ -55,6 +70,9 @@ test/cacert.inc: test/localhost.crt
 
 test/store.inc: o/generatestore
 	o/generatestore | xxd -i -name store_inc > $@
+
+test/store2.inc: o/generatestore2
+	o/generatestore2 | xxd -i -name store_inc > $@
 
 ESP_DEV?=/dev/ttyUSB0
 

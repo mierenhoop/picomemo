@@ -50,13 +50,13 @@ function lomemo.NewSession() end
 function lomemo.InitFromBundle(store, bundle) end
 
 --- @param msg string
---- @return string encrypted msg, string key, string iv
+--- @return string encrypted msg, string key, string iv?
 --- @overload fun(msg: string): nil, error: string
 function lomemo.EncryptMessage(msg) end
 
 --- @param msg string encrypted message
 --- @param key string
---- @param iv string
+--- @param iv? string for omemo:2 an iv is omitted
 --- @return string decrypted message
---- @overload fun(msg: string, key: string, iv: string): nil, error: string
+--- @overload fun(msg: string, key: string, iv?: string): nil, error: string
 function lomemo.DecryptMessage(msg, key, iv) end

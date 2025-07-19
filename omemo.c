@@ -326,7 +326,7 @@ static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
 static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey prv, const uint8_t *msg, size_t msgn) {
 #ifdef OMEMO2
   omemoKey pub;
-  // TODO: can we use idkp->pub instead of converting here?
+  // TODO: can we reuse idkp->pub
   edsign_sec_to_pub(pub, prv);
   edsign_sign(sig, pub, prv, msg, msgn);
   return 0;
@@ -761,9 +761,13 @@ static int DecryptKeyImpl(struct omemoSession *session,
   const uint8_t *realmac = fields1[1].p;
 #endif
 
-  // these checks should already be handled by ParseProtobuf, just to make sure...
+#ifndef OMEMO2
   if (fields[PbMsg_ciphertext].v > 48 || fields[PbMsg_ciphertext].v < 32)
     return OMEMO_ECORRUPT;
+#else
+  if (fields[PbMsg_ciphertext].v != 64)
+    return OMEMO_ECORRUPT;
+#endif
 
   uint32_t headern = fields[PbMsg_n].v;
   uint32_t headerpn = fields[PbMsg_pn].v;
@@ -806,12 +810,14 @@ static int DecryptKeyImpl(struct omemoSession *session,
   uint8_t mac[MACSIZE];
 #ifndef OMEMO2
   TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, msg, msgn-8));
+#else
+  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, fields1[2].p, fields1[2].v));
 #endif
   if (memcmp(mac, realmac, MACSIZE))
     return OMEMO_ECORRUPT;
-  uint8_t tmp[48];
+  uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
   TRY(Decrypt(tmp, fields[PbMsg_ciphertext].p, fields[PbMsg_ciphertext].v, kdfout->cipher, kdfout->iv));
-  memcpy(decrypted, tmp, 32);
+  memcpy(decrypted, tmp, sizeof(omemoKeyPayload));
   session->fsm = SESSION_READY;
   return 0;
 }
@@ -856,10 +862,14 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
       omemoKey sk;
       memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p), 32);
 #ifdef OMEMO2
-      omemoKey ik;
-      // TODO: is this conversion ok?
-      morph25519_e2m(ik, fields[PbKeyEx_ik].p);
-      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, ik, fields[PbKeyEx_ek].p, fields[PbKeyEx_ek].p));
+      omemoKey ikprv;
+      // TODO: rename this in c25519.c/h
+      expand_key(ikprv, store->identity.prv);
+      omemoKey ik, edx, edy;
+      if (!ed25519_try_unpack(edx, edy, fields[PbKeyEx_ik].p))
+        return OMEMO_ECORRUPT;
+      morph25519_e2m(ik, edy);
+      TRY(GetSharedSecret(sk, true, ikprv, spk->kp.prv, pk->kp.prv, ik, fields[PbKeyEx_ek].p, fields[PbKeyEx_ek].p));
 #else
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, GetDeser(fields[PbKeyEx_ik].p), GetDeser(fields[PbKeyEx_ek].p), GetDeser(fields[PbKeyEx_ek].p)));
 #endif

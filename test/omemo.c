@@ -21,7 +21,11 @@
 
 #include <sys/random.h>
 
+#ifdef OMEMO2
+#include "test/store2.inc"
+#else
 #include "test/store.inc"
+#endif
 
 // TODO: for all exposed functions, test all error paths
 
@@ -298,6 +302,7 @@ static void TestReceive() {
   assert(omemoDecryptKey(&session, &store, payload, true, msg, 164) == 0);
 }
 
+#ifndef OMEMO2
 static void TestDeriveChainKey() {
   static uint8_t seed[] = {
       0x8a, 0xb7, 0x2d, 0x6f, 0x4c, 0xc5, 0xac, 0x0d, 0x38, 0x7e, 0xaf,
@@ -331,6 +336,7 @@ static void TestDeriveChainKey() {
   assert(!memcmp(mk, kdfout->cipher, 32));
   assert(!memcmp(mac, kdfout->mac, 32));
 }
+#endif
 
 static void TestHkdf() {
   uint8_t ikm[] = {0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
@@ -465,7 +471,12 @@ static void TestSessionIntegration() {
   memset(&session, 0, sizeof(session));
   uint8_t buf[1000];
   omemoDeserializeStore(store_inc, store_inc_len, &store);
+#ifdef OMEMO2
+  FILE *f = fopen("o/msg2.bin", "r");
+#else
   FILE *f = fopen("o/msg.bin", "r");
+#endif
+  assert(f);
   int n = fread(buf, 1, 1000, f);
   assert(n > 0);
   fclose(f);
@@ -473,10 +484,15 @@ static void TestSessionIntegration() {
   omemoKeyPayload payload;
   assert(!omemoDecryptKey(&session, &store, payload, true, buf, n));
 
-  uint8_t exp[32];
+  omemoKeyPayload exp;
+#ifdef OMEMO2
+  memset(exp,    0x55, 32);
+  memset(exp+32, 0xaa, 16);
+#else
   memset(exp,    0x55, 16);
   memset(exp+16, 0xaa, 16);
-  assert(!memcmp(exp, payload, 32));
+#endif
+  assert(!memcmp(exp, payload, sizeof(exp)));
 }
 
 #define RunTest(t)                                                     \
@@ -496,12 +512,14 @@ int main() {
   RunTest(TestCurve25519);
   RunTest(TestSignature);
   RunTest(TestEncryption);
-  RunTest(TestSession);
-  RunTest(TestReceive);
-  RunTest(TestDeriveChainKey);
   RunTest(TestHkdf);
   RunTest(TestRatchet);
+#ifndef OMEMO2
+  RunTest(TestDeriveChainKey);
+#endif
   RunTest(TestSerialization);
   RunTest(TestSessionIntegration);
+  RunTest(TestReceive);
+  RunTest(TestSession);
   puts("All tests succeeded");
 }
