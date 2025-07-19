@@ -1,3 +1,4 @@
+
 /**
  * Copyright 2024 mierenhoop
  *
@@ -19,6 +20,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define OMEMO_NUMPREKEYS 100
 
@@ -32,11 +34,9 @@
 
 // TODO: these are all different for OMEMO2
 #ifdef OMEMO2
-#define OMEMO_INTERNAL_IV_SIZE 16
 #define OMEMO_INTERNAL_PAYLOAD_SIZE 48
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
 #else
-#define OMEMO_INTERNAL_IV_SIZE 12
 #define OMEMO_INTERNAL_PAYLOAD_SIZE 32
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 48
 #endif
@@ -94,7 +94,6 @@ struct omemoState {
 };
 
 typedef uint8_t omemoKeyPayload[OMEMO_INTERNAL_PAYLOAD_SIZE];
-typedef uint8_t omemoKeyIv[OMEMO_INTERNAL_IV_SIZE];
 
 struct omemoKeyMessage {
   uint8_t p[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE+OMEMO_INTERNAL_ENCRYPTED_MAXSIZE];
@@ -223,16 +222,27 @@ int omemoEncryptKey(struct omemoSession *session, const struct omemoStore *store
  */
 int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omemoKeyPayload payload, bool isprekey, const uint8_t *msg, size_t msgn);
 
+#ifdef OMEMO2
 /**
  * Encrypt message which will be stored in the <payload> element.
  *
  * @param payload (out) will contain the encrypted 
  * @param n is the size of the buffer in d and s
  */
+int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload, uint8_t *s,
+                        size_t n);
+#else
+/**
+ * Encrypt message which will be stored in the <payload> element.
+ *
+ * @param payload (out) will contain the encrypted
+ * @param n is the size of the buffer in d and s
+ */
 int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
-                               omemoKeyIv iv, uint8_t *s,
-                               size_t n);
+                        uint8_t iv[12], const uint8_t *s, size_t n);
+#endif
 
+#ifdef OMEMO2
 /**
  * Decrypt message taken from the <payload> element.
  *
@@ -240,6 +250,16 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
  * @param pn is the size of payload, some clients might make the tag larger than 16 bytes
  * @param n is the size of the buffer in d and s
  */
-int omemoDecryptMessage(uint8_t *d, size_t *outn, const uint8_t *payload, size_t pn, const omemoKeyIv iv, const uint8_t *s, size_t n);
+int omemoDecryptMessage(uint8_t *d, size_t *outn, const uint8_t *payload, size_t pn, const uint8_t *s, size_t n);
+#else
+/**
+ * Decrypt message taken from the <payload> element.
+ *
+ * @param payload is the decrypted payload of the omemoKeyMessage
+ * @param pn is the size of payload, some clients might make the tag larger than 16 bytes
+ * @param n is the size of the buffer in d and s
+ */
+int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n);
+#endif
 
 #endif

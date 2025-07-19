@@ -299,17 +299,25 @@ static int RotateSignedPreKey(lua_State *L) {
 static int EncryptMessage(lua_State *L) {
   size_t msgn;
   const char *msg = luaL_checklstring(L, 1, &msgn);
-  omemoKeyIv iv;
   omemoKeyPayload key;
+#ifdef OMEMO2
   size_t realsize = msgn+omemoGetMessagePadSize(msgn);
-  // allocate space for both padded decrypted and encrypted
+  // allocate space for both padded encrypted and decrypted
   char *buf = Alloc(L, 2*realsize);
-  memcpy(buf, msg, msgn);
-  int r = omemoEncryptMessage(buf+realsize, key, iv, buf, msgn);
+  memcpy(buf+realsize, msg, msgn);
+  int r = omemoEncryptMessage(buf, key, buf+realsize, msgn);
+  msgn = realsize;
+#else
+  uint8_t iv[12];
+  char *buf = Alloc(L, msgn);
+  int r = omemoEncryptMessage(buf, key, iv, msg, msgn);
+#endif
   if (!r) {
-    lua_pushlstring(L, buf+realsize, realsize);
+    lua_pushlstring(L, buf, msgn);
     lua_pushlstring(L, key, sizeof(key));
+#ifndef OMEMO2
     lua_pushlstring(L, iv, sizeof(iv));
+#endif
     free(buf);
     return 3;
   } else {
@@ -322,11 +330,16 @@ static int EncryptMessage(lua_State *L) {
 
 static int DecryptMessage(lua_State *L) {
   size_t msgn;
+  size_t keyn;
   const char *msg = luaL_checklstring(L, 1, &msgn);
-  const char *key = CheckLStringFix(2, sizeof(omemoKeyPayload), "key");
-  const char *iv = CheckLStringFix(3, sizeof(omemoKeyIv), "iv");
+  const char *key = luaL_checklstring(L, 2, &keyn);
   char *dec = Alloc(L, msgn);
-  int r = omemoDecryptMessage(dec, &msgn, key, sizeof(omemoKeyPayload), iv, msg, msgn);
+#ifdef OMEMO2
+  int r = omemoDecryptMessage(dec, &msgn, key, keyn, msg, msgn);
+#else
+  const char *iv = CheckLStringFix(3, 12, "iv");
+  int r = omemoDecryptMessage(dec, key, keyn, iv, msg, msgn);
+#endif
   if (!r) {
     lua_pushlstring(L, dec, msgn);
     free(dec);

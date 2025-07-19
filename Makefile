@@ -1,37 +1,51 @@
-CFLAGS+= -g -std=c99 -Wall -Wno-pointer-sign -I.
+CFLAGS=-g -std=c99 -Wall -Wno-pointer-sign -I. -MMD -MP
 
-LAXCFLAGS=-g -Wall -Wno-pointer-sign -I. -Wno-unused
+OMEMOSRCS=c25519.c omemo.c
+XMPPSRCS=example/xmpp.c example/yxml.c
+IMSRCS=example/im.c
 
-all: o/test o/im o/test-omemo
+ALLBINS=o/test-xmpp \
+		o/test-omemo \
+		o/test-omemo2 \
+		o/im \
+		o/generatestore \
+		o/generatebundle
+
+DEPS=$(ALLBINS:%=%.d)
+
+all: $(ALLBINS) tags
+
+.PHONY: test
+test: test-omemo
+
+$(ALLBINS): | o
 
 o:
 	mkdir -p o
 
-o/xmpp.o: example/xmpp.c example/xmpp.h | o
-	$(CC) -c -o $@ $(CFLAGS) example/xmpp.c
+o/test-xmpp: test/xmpp.c example/yxml.c | example/xmpp.c test/cacert.inc
+	$(CC) -o $@ $^ $(CFLAGS) -Iexample -lmbedcrypto -lmbedtls -lmbedx509
 
-o/test: o/xmpp.o test/cacert.inc test/xmpp.c
-	$(CC) -o $@ example/yxml.c test/xmpp.c $(CFLAGS) -Iexample -lmbedcrypto -lmbedtls -lmbedx509
+o/test-omemo: test/omemo.c c25519.c | omemo.c o/msg.bin
+	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
 
-o/test-omemo: test/omemo.c omemo.c c25519.c omemo.h | o
-	$(CC) -o $@ c25519.c test/omemo.c $(CFLAGS) -lmbedcrypto
+o/test-omemo2: test/omemo.c c25519.c | omemo.c
+	$(CC) -o $@ $^ $(CFLAGS) -DOMEMO2 -lmbedcrypto
 
-o/test-omemo2: test/omemo.c omemo.c c25519.c omemo.h | o
-	$(CC) -o $@ c25519.c test/omemo.c -DOMEMO2 $(CFLAGS) -lmbedcrypto
+o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | test/store.inc test/cacert.inc
+	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
 
-o/im: o/xmpp.o example/im.c test/cacert.inc omemo.c c25519.c omemo.h
-	$(CC) -o $@ example/im.c example/yxml.c omemo.c c25519.c o/xmpp.o $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
+o/generatestore: test/generatestore.c $(OMEMOSRCS) | test/defaultcallbacks.inc
+	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
 
-o/generatestore: test/generatestore.c omemo.c c25519.c omemo.h | o
-	$(CC) -o $@ c25519.c omemo.c test/generatestore.c $(CFLAGS) -lmbedcrypto
+o/generatebundle: test/generatebundle.c $(OMEMOSRCS) | test/defaultcallbacks.inc test/store.inc
+	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
 
-.PHONY: test-session
-test-session: test/generatebundle.c test/initsession.py test/store.inc | o test/bot-venv
-	$(CC) -o o/generatebundle c25519.c omemo.c test/generatebundle.c $(CFLAGS) -lmbedcrypto
-	$(CC) -o o/testsession c25519.c omemo.c test/testsession.c $(CFLAGS) -lmbedcrypto
+test/bundle.py: o/generatebundle
 	./o/generatebundle
+
+o/msg.bin: test/initsession.py test/bundle.py | test/bot-venv/
 	./test/bot-venv/bin/python test/initsession.py
-	./o/testsession
 
 test/localhost.crt:
 	openssl req -new -x509 -key test/localhost.key -out $@ -days 3650 -config test/localhost.cnf
@@ -40,7 +54,7 @@ test/cacert.inc: test/localhost.crt
 	(cat test/localhost.crt; printf "\0") | xxd -i -name cacert_pem > $@
 
 test/store.inc: o/generatestore
-	o/generatestore | xxd -i -name store > $@
+	o/generatestore | xxd -i -name store_inc > $@
 
 ESP_DEV?=/dev/ttyUSB0
 
@@ -71,8 +85,8 @@ esp-monitor:
 	$(ESPIDF_DOCKERCMD) monitor
 
 .PHONY: test
-test: o/test
-	./o/test
+test-xmpp: o/test-xmpp
+	./o/test-xmpp
 
 .PHONY: test-omemo
 test-omemo: o/test-omemo
@@ -120,12 +134,10 @@ start-omemo-bot: | test/bot-venv/
 
 .PHONY: tags
 tags:
-	ctags-exuberant --c-kinds=+p -R --exclude=o --exclude=test/bot-venv
+	@ctags-exuberant --c-kinds=+p -R --exclude=o --exclude=test/bot-venv
 
 .PHONY: clean
 clean:
 	rm -rf o
 
-.PHONY: full-clean
-full-clean: clean
-	rm -rf test/cacert.inc test/store.inc test/localhost.crt test/bot-venv
+-include $(DEPS)

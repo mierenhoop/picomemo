@@ -21,6 +21,8 @@
 
 #include <sys/random.h>
 
+#include "test/store.inc"
+
 // TODO: for all exposed functions, test all error paths
 
 int omemoRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
@@ -176,12 +178,18 @@ static void TestEncryption() {
   const uint8_t *msg = "Hello there!";
   size_t n = strlen(msg);
   uint8_t encrypted[100], decrypted[100];
-  omemoKeyIv iv;
   strcpy(decrypted, msg);
   omemoKeyPayload payload;
+#ifdef OMEMO2
+  assert(!omemoEncryptMessage(encrypted, payload, decrypted, n));
+  memset(decrypted, 0, sizeof(decrypted));
+  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(omemoKeyPayload), encrypted, n+omemoGetMessagePadSize(n)));
+#else
+  uint8_t iv[12];
   assert(!omemoEncryptMessage(encrypted, payload, iv, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
-  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(omemoKeyPayload), iv, encrypted, n+omemoGetMessagePadSize(n)));
+  assert(!omemoDecryptMessage(decrypted, payload, sizeof(omemoKeyPayload), iv, encrypted, n));
+#endif
   assert(!memcmp(msg, decrypted, n));
 }
 
@@ -451,6 +459,26 @@ static void TestSerialization() {
   assert(!memcmp(&tmpsession, &sessiona, sizeof(struct omemoSession)));
 }
 
+static void TestSessionIntegration() {
+  struct omemoSession session;
+  struct omemoStore store;
+  memset(&session, 0, sizeof(session));
+  uint8_t buf[1000];
+  omemoDeserializeStore(store_inc, store_inc_len, &store);
+  FILE *f = fopen("o/msg.bin", "r");
+  int n = fread(buf, 1, 1000, f);
+  assert(n > 0);
+  fclose(f);
+
+  omemoKeyPayload payload;
+  assert(!omemoDecryptKey(&session, &store, payload, true, buf, n));
+
+  uint8_t exp[32];
+  memset(exp,    0x55, 16);
+  memset(exp+16, 0xaa, 16);
+  assert(!memcmp(exp, payload, 32));
+}
+
 #define RunTest(t)                                                     \
   do {                                                                 \
     puts("\e[34mRunning test " #t "\e[0m");                            \
@@ -474,5 +502,6 @@ int main() {
   RunTest(TestHkdf);
   RunTest(TestRatchet);
   RunTest(TestSerialization);
+  RunTest(TestSessionIntegration);
   puts("All tests succeeded");
 }

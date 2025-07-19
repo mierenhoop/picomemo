@@ -1,6 +1,9 @@
 #include <sys/random.h>
 
-int omemoRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
+int omemoRandom(void *d, size_t n) {
+  assert(getrandom(d, n, 0) == n);
+  return 0;
+}
 
 int omemoLoadMessageKey(struct omemoSession *, struct omemoMessageKey *sk) { return 1; }
 

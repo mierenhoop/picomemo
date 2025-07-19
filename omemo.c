@@ -903,9 +903,8 @@ int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omem
 
 /******************** MESSAGE CONTENT ENCRYPTION *********************/
 
-// TODO: for OMEMO2 we're not using the iv, so we could make a separate function without iv argument and with olen
-int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t pn, const omemoKeyIv iv, const uint8_t *s, size_t n) {
 #ifdef OMEMO2
+int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t pn, const uint8_t *s, size_t n) {
   if (pn != 48) return OMEMO_ECORRUPT;
   if (n < 16 || n % 16) return OMEMO_ECORRUPT;
   uint8_t key[32];
@@ -923,7 +922,9 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t
   memset(d-p, 0, p);
   *olen = n-p;
   return 0;
+}
 #else
+int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n) {
   int r = 0;
   if (pn < 32)
     return OMEMO_ECORRUPT;
@@ -932,14 +933,13 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t
   if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, payload, 128)))
     r = mbedtls_gcm_auth_decrypt(&ctx, n, iv, 12, "", 0, payload+16, pn-16, s, d);
   mbedtls_gcm_free(&ctx);
-  *olen = n;
   return r ? OMEMO_ECRYPTO : 0;
-#endif
 }
+#endif
 
-int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
-                        omemoKeyIv iv, uint8_t *s, size_t n) {
 #ifdef OMEMO2
+int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
+                        uint8_t *s, size_t n) {
   uint8_t key[32];
   TRY(omemoRandom(key, 32));
   struct DeriveChainKeyOutput kdfout[1];
@@ -953,9 +953,11 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
   Hmac(kdfout->mac, d, n+extend, mac);
   memcpy(payload,    key, 32);
   memcpy(payload+32, mac, 16);
-  memcpy(iv, kdfout->iv, 16);
   return 0;
+}
 #else
+int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
+                        uint8_t iv[12], const uint8_t *s, size_t n) {
   int r = 0;
   if ((r = omemoRandom(payload, 16))
    || (r = omemoRandom(iv, 12)))
@@ -966,8 +968,8 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
     r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, iv, 12, "", 0, s, d, 16, payload+16);
   mbedtls_gcm_free(&ctx);
   return r ? OMEMO_ECRYPTO : 0;
-#endif
 }
+#endif
 
 /************************** SERIALIZATION ****************************/
 

@@ -425,9 +425,10 @@ static void ParseEncryptedMessage(struct xmppParser *parser, const struct xmppXm
   if (ivslc.n && payloadslc.n) {
     DecodeBase64(&iv, &ivsz, &ivslc);
     DecodeBase64(&payload, &payloadsz, &payloadslc);
+    if (ivsz != 12) goto free;
     decryptedpayload = Malloc(payloadsz+1);
     decryptedpayload[payloadsz] = 0;
-    r = omemoDecryptMessage(decryptedpayload, &payloadsz, decryptedkey, sizeof(omemoKeyPayload), iv, payload, payloadsz);
+    r = omemoDecryptMessage(decryptedpayload, decryptedkey, sizeof(omemoKeyPayload), iv, payload, payloadsz);
     if (r < 0) {
       LogWarn("Message decryption error: %d", r);
       goto free;
@@ -713,7 +714,7 @@ static bool IterateClient() {
 static void SendNormalOmemo(const char *msg) {
   size_t msgn = strlen(msg);
   char *payload = Malloc(msgn);
-  omemoKeyIv iv;
+  uint8_t iv[12];
   omemoKeyPayload encryptionkey;
   int r = omemoEncryptMessage(payload, encryptionkey, iv, msg, msgn);
   if (r < 0) {
@@ -793,7 +794,7 @@ static void Loop() {
 }
 
 static void LoadStore() {
-  assert(!omemoDeserializeStore(store, store_len, &omemostore));
+  assert(!omemoDeserializeStore(store_inc, store_inc_len, &omemostore));
 }
 
 void RunIm(const char *ip) {

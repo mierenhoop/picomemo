@@ -24,7 +24,7 @@ int main() {
   f=fopen("test/bundle.py", "w");
   assert(f);
   struct omemoStore st;
-  omemoDeserializeStore(store, store_len, &st);
+  omemoDeserializeStore(store_inc, store_inc_len, &st);
   fprintf(f, "ik=");PrintSer(st.identity.pub);
   fprintf(f, "spk=");PrintSer(st.cursignedprekey.kp.pub);
   fprintf(f, "spks=");PrintHex(st.cursignedprekey.sig, 64);
