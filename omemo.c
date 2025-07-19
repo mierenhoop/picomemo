@@ -28,14 +28,40 @@
 #include "omemo.h"
 
 #ifdef OMEMO2
+
 #define HkdfInfoKeyExchange "OMEMO X3DH"
 #define HkdfInfoRootChain   "OMEMO Root Chain"
 #define HkdfInfoMessageKeys "OMEMO Message Key Material"
 #define HkdfInfoPayload     "OMEMO Payload"
+
+#define PbMsg_n          1
+#define PbMsg_pn         2
+#define PbMsg_dh_pub     3
+#define PbMsg_ciphertext 4
+
+#define PbKeyEx_pk_id      1
+#define PbKeyEx_spk_id     2
+#define PbKeyEx_ik         3
+#define PbKeyEx_ek         4
+#define PbKeyEx_message    5
+
 #else
+
 #define HkdfInfoKeyExchange "WhisperText"
 #define HkdfInfoRootChain   "WhisperRatchet"
 #define HkdfInfoMessageKeys "WhisperMessageKeys"
+
+#define PbMsg_n          2
+#define PbMsg_pn         3
+#define PbMsg_dh_pub     1
+#define PbMsg_ciphertext 4
+
+#define PbKeyEx_pk_id      1
+#define PbKeyEx_spk_id     6
+#define PbKeyEx_ik         3
+#define PbKeyEx_ek         2
+#define PbKeyEx_message    4
+
 #endif
 
 #define TRY(expr) \
@@ -59,6 +85,15 @@ void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
 #else
   k[0] = 5;
   memcpy(k + 1, pub, SerLen - 1);
+#endif
+}
+
+// Actually returns omemoKey
+static inline const uint8_t *GetDeser(const omemoSerializedKey k) {
+#ifdef OMEMO2
+  return k;
+#else
+  return k+1;
 #endif
 }
 
@@ -699,32 +734,40 @@ static int DecryptKeyImpl(struct omemoSession *session,
   if (msgn < 9 || msg[0] != ((3 << 4) | 3))
     return OMEMO_ECORRUPT;
   struct ProtobufField fields[5] = {
-    [1] = {PB_REQUIRED | PB_LEN, SerLen}, // ek
-    [2] = {PB_REQUIRED | PB_UINT32}, // n
-    [3] = {PB_REQUIRED | PB_UINT32}, // pn
-    [4] = {PB_REQUIRED | PB_LEN}, // ciphertext
+    [PbMsg_dh_pub]     = {PB_REQUIRED | PB_LEN, SerLen},
+    [PbMsg_n]          = {PB_REQUIRED | PB_UINT32},
+    [PbMsg_pn]         = {PB_REQUIRED | PB_UINT32},
+    [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
   };
   if (ParseProtobuf(msg+1, msgn-9, fields, 5))
     return OMEMO_EPROTOBUF;
+  const uint8_t *realmac = msg+msgn-8;
 #else
-  struct ProtobufField fields[5] = {
-    [1] = {PB_REQUIRED | PB_UINT32}, // n
-    [2] = {PB_REQUIRED | PB_UINT32}, // pn
-    [3] = {PB_REQUIRED | PB_LEN, SerLen}, // ek
-    [4] = {PB_REQUIRED | PB_LEN}, // ciphertext
+  struct ProtobufField fields1[3] = {
+    [1] = {PB_REQUIRED | PB_LEN, 16}, // mac
+    [2] = {PB_REQUIRED | PB_LEN},     // message
   };
-  if (ParseProtobuf(msg, msgn, fields, 5))
+  if (ParseProtobuf(msg, msgn, fields1, 3))
     return OMEMO_EPROTOBUF;
+
+  struct ProtobufField fields[5] = {
+    [PbMsg_n]          = {PB_REQUIRED | PB_UINT32},
+    [PbMsg_pn]         = {PB_REQUIRED | PB_UINT32},
+    [PbMsg_dh_pub]     = {PB_REQUIRED | PB_LEN, SerLen},
+    [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
+  };
+  if (ParseProtobuf(fields1[2].p, fields1[2].v, fields, 5))
+    return OMEMO_EPROTOBUF;
+  const uint8_t *realmac = fields1[1].p;
 #endif
 
   // these checks should already be handled by ParseProtobuf, just to make sure...
-  if (fields[4].v > 48 || fields[4].v < 32)
+  if (fields[PbMsg_ciphertext].v > 48 || fields[PbMsg_ciphertext].v < 32)
     return OMEMO_ECORRUPT;
-  assert(fields[1].v == 33); // TODO: make a test out of this in test/omemo.c and remove here
 
-  uint32_t headern = fields[2].v;
-  uint32_t headerpn = fields[3].v;
-  const uint8_t *headerdh = fields[1].p+1;
+  uint32_t headern = fields[PbMsg_n].v;
+  uint32_t headerpn = fields[PbMsg_pn].v;
+  const uint8_t *headerdh = GetDeser(fields[PbMsg_dh_pub].p);
 
   bool shouldstep = !!memcmp(session->state.dhr, headerdh, 32);
 
@@ -763,11 +806,11 @@ static int DecryptKeyImpl(struct omemoSession *session,
   uint8_t mac[MACSIZE];
 #ifndef OMEMO2
   TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, msg, msgn-8));
-  if (memcmp(mac, msg+msgn-8, 8))
-    return OMEMO_ECORRUPT;
 #endif
+  if (memcmp(mac, realmac, MACSIZE))
+    return OMEMO_ECORRUPT;
   uint8_t tmp[48];
-  TRY(Decrypt(tmp, fields[4].p, fields[4].v, kdfout->cipher, kdfout->iv));
+  TRY(Decrypt(tmp, fields[PbMsg_ciphertext].p, fields[PbMsg_ciphertext].v, kdfout->cipher, kdfout->iv));
   memcpy(decrypted, tmp, 32);
   session->fsm = SESSION_READY;
   return 0;
@@ -779,11 +822,11 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
 #ifdef OMEMO2
     // OMEMOKeyExchange
     struct ProtobufField fields[6] = {
-      [1] = {PB_REQUIRED | PB_UINT32}, // prekeyid
-      [2] = {PB_REQUIRED | PB_UINT32}, // signedprekeyid
-      [3] = {PB_REQUIRED | PB_LEN, 32}, // identitykey/ik
-      [4] = {PB_REQUIRED | PB_LEN, 32}, // basekey/ek
-      [5] = {PB_REQUIRED | PB_LEN}, // message
+      [PbKeyEx_pk_id]   = {PB_REQUIRED | PB_UINT32},
+      [PbKeyEx_spk_id]  = {PB_REQUIRED | PB_UINT32},
+      [PbKeyEx_ik]      = {PB_REQUIRED | PB_LEN, SerLen},
+      [PbKeyEx_ek]      = {PB_REQUIRED | PB_LEN, SerLen},
+      [PbKeyEx_message] = {PB_REQUIRED | PB_LEN},
     };
     if (ParseProtobuf(msg, msgn, fields, 6))
       return OMEMO_EPROTOBUF;
@@ -793,11 +836,11 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
     // PreKeyWhisperMessage
     struct ProtobufField fields[7] = {
       [5] = {PB_REQUIRED | PB_UINT32}, // registrationid
-      [1] = {PB_REQUIRED | PB_UINT32}, // prekeyid
-      [6] = {PB_REQUIRED | PB_UINT32}, // signedprekeyid
-      [2] = {PB_REQUIRED | PB_LEN, 33}, // basekey/ek
-      [3] = {PB_REQUIRED | PB_LEN, 33}, // identitykey/ik
-      [4] = {PB_REQUIRED | PB_LEN}, // message
+      [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32}, // prekeyid
+      [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32}, // signedprekeyid
+      [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen}, // basekey/ek
+      [PbKeyEx_ik] = {PB_REQUIRED | PB_LEN, SerLen}, // identitykey/ik
+      [PbKeyEx_message] = {PB_REQUIRED | PB_LEN}, // message
     };
     if (ParseProtobuf(msg+1, msgn-1, fields, 7))
       return OMEMO_EPROTOBUF;
@@ -806,34 +849,24 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
     // we could put this in session->fsm...
     if (session->state.nr == 0) {
       // TODO: later remove this prekey
-      pk = FindPreKey(store, fields[1].v);
-#ifdef OMEMO2
-      const struct omemoSignedPreKey *spk = FindSignedPreKey(store, fields[2].v);
-#else
-      const struct omemoSignedPreKey *spk = FindSignedPreKey(store, fields[6].v);
-#endif
+      pk = FindPreKey(store, fields[PbKeyEx_pk_id].v);
+      const struct omemoSignedPreKey *spk = FindSignedPreKey(store, fields[PbKeyEx_spk_id].v);
       if (!pk || !spk)
         return OMEMO_ECORRUPT;
       omemoKey sk;
+      memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p), 32);
 #ifdef OMEMO2
-      memcpy(session->remoteidentity, fields[3].p, 32);
       omemoKey ik;
       // TODO: is this conversion ok?
-      morph25519_e2m(ik, fields[3].p);
-      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, ik, fields[2].p, fields[2].p));
+      morph25519_e2m(ik, fields[PbKeyEx_ik].p);
+      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, ik, fields[PbKeyEx_ek].p, fields[PbKeyEx_ek].p));
 #else
-      memcpy(session->remoteidentity, fields[3].p+1, 32);
-      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, fields[3].p+1, fields[2].p+1, fields[2].p+1));
+      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, GetDeser(fields[PbKeyEx_ik].p), GetDeser(fields[PbKeyEx_ek].p), GetDeser(fields[PbKeyEx_ek].p)));
 #endif
       RatchetInitBob(&session->state, sk, &spk->kp);
     }
-#ifdef OMEMO2
-    msg = fields[5].p;
-    msgn = fields[5].v;
-#else
-    msg = fields[4].p;
-    msgn = fields[4].v;
-#endif
+    msg = fields[PbKeyEx_message].p;
+    msgn = fields[PbKeyEx_message].v;
   } else {
     if (!session->fsm) // TODO: specify which states are allowed here
       return OMEMO_ESTATE;
