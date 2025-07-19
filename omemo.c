@@ -460,21 +460,18 @@ static int Decrypt(uint8_t *out, const uint8_t *in, size_t n, omemoKey key,
   return 0;
 }
 
+static const uint8_t Zero32[32];
+
+#define DeriveKey(salt, secret, info, out) \
+  (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),     \
+                salt, sizeof(salt), secret, sizeof(secret),       \
+                info, sizeof(info)-1, (uint8_t*)out, sizeof(out)) \
+   ? OMEMO_ECRYPTO : 0)
+
 struct __attribute__((__packed__)) DeriveChainKeyOutput {
   omemoKey cipher, mac;
   uint8_t iv[16];
 };
-
-static int DeriveChainKey(struct DeriveChainKeyOutput *out, const omemoKey ck, uint8_t *info, size_t infon) {
-  uint8_t salt[32];
-  memset(salt, 0, 32);
-  assert(sizeof(struct DeriveChainKeyOutput) == 80);
-  if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
-                      salt, 32, ck, 32, info, infon, (uint8_t *)out,
-                      sizeof(struct DeriveChainKeyOutput)))
-    return OMEMO_ECRYPTO;
-  return 0;
-}
 
 // d may be the same pointer as ck
 //  ck, mk = KDF_CK(ck)
@@ -500,13 +497,13 @@ static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore 
     return OMEMO_ESTATE;
   omemoKey mk;
   TRY(GetBaseMaterials(session->state.cks, mk, session->state.cks));
-  struct DeriveChainKeyOutput kdfout;
-  TRY(DeriveChainKey(&kdfout, mk, HkdfInfoMessageKeys, sizeof(HkdfInfoMessageKeys)-1));
+  struct DeriveChainKeyOutput kdfout[1];
+  TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   msg->n = FormatMessageHeader(msg->p, session->state.ns, session->state.pn, session->state.dhs.pub);
-  TRY(Encrypt(msg->p+msg->n, payload, kdfout.cipher, kdfout.iv));
+  TRY(Encrypt(msg->p+msg->n, payload, kdfout->cipher, kdfout->iv));
   msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
 #ifndef OMEMO2
-  TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout.mac, msg->p, msg->n));
+  TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p, msg->n));
   msg->n += 8;
 #endif
   session->state.ns++;
@@ -541,10 +538,7 @@ int omemoEncryptKey(struct omemoSession *session, const struct omemoStore *store
 static int DeriveRootKey(struct omemoState *state, omemoKey ck) {
   uint8_t secret[32], masterkey[64];
   curve25519(secret, state->dhs.prv, state->dhr);
-  if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
-                      state->rk, 32, secret, sizeof(secret),
-                      HkdfInfoRootChain, sizeof(HkdfInfoRootChain)-1, masterkey, 64) != 0)
-    return OMEMO_ECRYPTO;
+  TRY(DeriveKey(state->rk, secret, HkdfInfoRootChain, masterkey));
   memcpy(state->rk, masterkey, 32);
   memcpy(ck, masterkey + 32, 32);
   return 0;
@@ -557,7 +551,7 @@ static int DeriveRootKey(struct omemoState *state, omemoKey ck) {
 // DH4 = DH(EKA, OPKB)
 // SK = KDF(DH1 || DH2 || DH3 || DH4)
 static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika, const omemoKey ska, const omemoKey eka, const omemoKey ikb, const omemoKey spkb, const omemoKey opkb) {
-  uint8_t secret[32*5] = {0}, salt[32];
+  uint8_t secret[32*5] = {0}, tmpkey[32];
   memset(secret, 0xff, 32);
   // When we are bob, we must swap the first two.
   curve25519(secret+32, isbob ? ska : ika, isbob ? ikb : spkb);
@@ -565,12 +559,8 @@ static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika, const om
   curve25519(secret+96, ska, spkb);
   // OMEMO mandates that the bundle MUST contain a prekey.
   curve25519(secret+128, eka, opkb);
-  memset(salt, 0, 32);
-  if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, 32, secret, sizeof(secret), HkdfInfoKeyExchange, sizeof(HkdfInfoKeyExchange)-1, sk, 32) != 0)
-    return OMEMO_ECRYPTO;
-  uint8_t full[64];
-  if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, 32, secret, sizeof(secret), HkdfInfoKeyExchange, sizeof(HkdfInfoKeyExchange)-1, full, 64) != 0)
-    return OMEMO_ECRYPTO;
+  TRY(DeriveKey(Zero32, secret, HkdfInfoKeyExchange, tmpkey));
+  memcpy(sk, tmpkey, 32);
   return 0;
 }
 
@@ -763,16 +753,16 @@ static int DecryptKeyImpl(struct omemoSession *session,
     TRY(GetBaseMaterials(session->state.ckr, mk, session->state.ckr));
     session->state.nr++;
   }
-  struct DeriveChainKeyOutput kdfout;
-  TRY(DeriveChainKey(&kdfout, mk, HkdfInfoMessageKeys, sizeof(HkdfInfoMessageKeys)-1));
+  struct DeriveChainKeyOutput kdfout[1];
+  TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   uint8_t mac[MACSIZE];
 #ifndef OMEMO2
-  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout.mac, msg, msgn-8));
+  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, msg, msgn-8));
   if (memcmp(mac, msg+msgn-8, 8))
     return OMEMO_ECORRUPT;
 #endif
   uint8_t tmp[48];
-  TRY(Decrypt(tmp, fields[4].p, fields[4].v, kdfout.cipher, kdfout.iv));
+  TRY(Decrypt(tmp, fields[4].p, fields[4].v, kdfout->cipher, kdfout->iv));
   memcpy(decrypted, tmp, 32);
   session->fsm = SESSION_READY;
   return 0;
@@ -880,18 +870,18 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t
 #ifdef OMEMO2
   if (pn != 48) return OMEMO_ECORRUPT;
   if (n < 16 || n % 16) return OMEMO_ECORRUPT;
-  struct DeriveChainKeyOutput kdfout;
-  TRY(DeriveChainKey(&kdfout, payload, HkdfInfoPayload, sizeof(HkdfInfoPayload)-1));
+  struct DeriveChainKeyOutput kdfout[1];
+  TRY(DeriveKey(Zero32, payload, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
   // TODO: this should always return 0, we can assert
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout.mac, 32, s, n, mac) != 0)
+  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout->mac, 32, s, n, mac) != 0)
     return OMEMO_ECRYPTO;
   if (memcmp(mac, payload+32, 16))
     return OMEMO_ESIG; // TODO: have new error code for this?
   mbedtls_aes_context aes;
-  if (mbedtls_aes_setkey_dec(&aes, kdfout.cipher, 256) ||
+  if (mbedtls_aes_setkey_dec(&aes, kdfout->cipher, 256) ||
   mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, n,
-                               kdfout.iv, s, d))
+                               kdfout->iv, s, d))
     return OMEMO_ECRYPTO;
   uint8_t p = d[n-1];
   if (p > n) return OMEMO_ECORRUPT;
@@ -916,25 +906,25 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
                         omemoKeyIv iv, uint8_t *s, size_t n) {
 #ifdef OMEMO2
   TRY(omemoRandom(payload, 32));
-  // Reusing DeriveChainKey
-  struct DeriveChainKeyOutput kdfout;
-  TRY(DeriveChainKey(&kdfout, payload, HkdfInfoPayload, sizeof(HkdfInfoPayload)-1));
+  // Reusing DeriveChainKeyOutput
+  struct DeriveChainKeyOutput kdfout[1];
+  TRY(DeriveKey(Zero32, payload, HkdfInfoPayload, kdfout));
   // PKCS#7
   // TODO: describe how buffer `s` must be of n+extend size
   size_t extend = omemoGetMessagePadSize(n);
   memset(s+n, extend, extend);
   mbedtls_aes_context aes;
-  if (mbedtls_aes_setkey_enc(&aes, kdfout.cipher, 256)
+  if (mbedtls_aes_setkey_enc(&aes, kdfout->cipher, 256)
    || mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, n+extend,
-                               kdfout.iv, s, d))
+                               kdfout->iv, s, d))
     return OMEMO_ECRYPTO;
   uint8_t mac[32];
   // TODO: this should always return 0, we can assert
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout.mac,
+  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout->mac,
                       32, d, n+extend, mac) != 0)
     return OMEMO_ECRYPTO;
   memcpy(payload+32, mac, 16);
-  memcpy(iv, kdfout.iv, 16);
+  memcpy(iv, kdfout->iv, 16);
   return 0;
 #else
   int r = 0;

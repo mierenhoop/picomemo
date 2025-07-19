@@ -318,10 +318,10 @@ static void TestDeriveChainKey() {
   omemoKey myck, mymk;
   assert(!GetBaseMaterials(myck, mymk, seed));
   assert(!memcmp(ck, myck, 32));
-  struct DeriveChainKeyOutput out;
-  assert(!DeriveChainKey(&out, mymk, HkdfInfoMessageKeys, sizeof(HkdfInfoMessageKeys)-1));
-  assert(!memcmp(mk, out.cipher, 32));
-  assert(!memcmp(mac, out.mac, 32));
+  struct DeriveChainKeyOutput kdfout[1];
+  assert(!DeriveKey(Zero32, mymk, HkdfInfoMessageKeys, kdfout));
+  assert(!memcmp(mk, kdfout->cipher, 32));
+  assert(!memcmp(mac, kdfout->mac, 32));
 }
 
 static void TestHkdf() {
