@@ -418,6 +418,13 @@ static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika, const omemoKey 
   omemoSerializeKey(ad + SerLen, ikb);
 }
 
+static void Hmac(const omemoKey k, const uint8_t *in, size_t ilen,
+                 uint8_t out[static 32]) {
+  // Only error return is from parameter verification so we can assert
+  assert(!mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+                          k, 32, in, ilen, out));
+}
+
 static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
                   const omemoKey ikb, const omemoKey mk,
                   const uint8_t *msg, size_t msgn) {
@@ -428,13 +435,23 @@ static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
   uint8_t macinput[ADSIZE + OMEMO_INTERNAL_FULLMSG_MAXSIZE], mac[32];
   GetAd(macinput, ika, ikb);
   memcpy(macinput + ADSIZE, msg, msgn);
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), mk,
-                      32, macinput, ADSIZE + msgn, mac) != 0)
-    return OMEMO_ECRYPTO;
-  // TODO: OMEMO2 truncate to 16 bytes
+  Hmac(mk, macinput, ADSIZE+msgn, mac);
   memcpy(d, mac, MACSIZE);
   return 0;
 }
+
+static void AesCbc(int mode, uint8_t key[static 32], size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d) {
+  // Errors are input validations, so we can assert
+  mbedtls_aes_context aes;
+  if (mode == MBEDTLS_AES_DECRYPT)
+    assert(!mbedtls_aes_setkey_dec(&aes, key, 256));
+  else
+    assert(!mbedtls_aes_setkey_enc(&aes, key, 256));
+  assert(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
+}
+
+#define DecAesCbc(key,n,iv,s,d) AesCbc(MBEDTLS_AES_DECRYPT,key,n,iv,s,d)
+#define EncAesCbc(key,n,iv,s,d) AesCbc(MBEDTLS_AES_ENCRYPT,key,n,iv,s,d)
 
 static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE], const omemoKeyPayload in, omemoKey key,
                     uint8_t iv[static 16]) {
@@ -442,21 +459,13 @@ static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE], const omem
   uint8_t tmp[48];
   memcpy(tmp, in, 32);
   memset(tmp+32, 0x10, 0x10);
-  mbedtls_aes_context aes;
-  if (mbedtls_aes_setkey_enc(&aes, key, 256)
-   || mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, 48,
-                               iv, tmp, out))
-    return OMEMO_ECRYPTO;
+  EncAesCbc(key, 48, iv, tmp, out);
   return 0;
 }
 
 static int Decrypt(uint8_t *out, const uint8_t *in, size_t n, omemoKey key,
                     uint8_t iv[static 16]) {
-  mbedtls_aes_context aes;
-  if (mbedtls_aes_setkey_dec(&aes, key, 256) ||
-  mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, n,
-                               iv, in, out))
-    return OMEMO_ECRYPTO;
+  DecAesCbc(key, n, iv, in, out);
   return 0;
 }
 
@@ -477,14 +486,10 @@ struct __attribute__((__packed__)) DeriveChainKeyOutput {
 //  ck, mk = KDF_CK(ck)
 // NOTE: OMEMO2 COMPLIANT
 static int GetBaseMaterials(omemoKey d, omemoKey mk, const omemoKey ck) {
-  omemoKey tmp;
-  uint8_t data = 1;
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), ck, 32, &data, 1, mk) != 0)
-    return OMEMO_ECRYPTO;
-  data = 2;
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), ck, 32, &data, 1, tmp) != 0)
-    return OMEMO_ECRYPTO;
-  memcpy(d, tmp, 32);
+  uint8_t data[1] = {1};
+  Hmac(ck, data, 1, mk);
+  data[0] = 2;
+  Hmac(ck, data, 1, d);
   return 0;
 }
 
@@ -870,19 +875,16 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t
 #ifdef OMEMO2
   if (pn != 48) return OMEMO_ECORRUPT;
   if (n < 16 || n % 16) return OMEMO_ECORRUPT;
+  uint8_t key[32];
+  memcpy(key, payload, 32);
   struct DeriveChainKeyOutput kdfout[1];
-  TRY(DeriveKey(Zero32, payload, HkdfInfoPayload, kdfout));
+  TRY(DeriveKey(Zero32, key, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
-  // TODO: this should always return 0, we can assert
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout->mac, 32, s, n, mac) != 0)
-    return OMEMO_ECRYPTO;
+  Hmac(kdfout->mac, s, n, mac);
   if (memcmp(mac, payload+32, 16))
     return OMEMO_ESIG; // TODO: have new error code for this?
-  mbedtls_aes_context aes;
-  if (mbedtls_aes_setkey_dec(&aes, kdfout->cipher, 256) ||
-  mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, n,
-                               kdfout->iv, s, d))
-    return OMEMO_ECRYPTO;
+  DecAesCbc(kdfout->cipher, n, kdfout->iv, s, d);
+
   uint8_t p = d[n-1];
   if (p > n) return OMEMO_ECORRUPT;
   memset(d-p, 0, p);
@@ -905,24 +907,18 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t
 int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
                         omemoKeyIv iv, uint8_t *s, size_t n) {
 #ifdef OMEMO2
-  TRY(omemoRandom(payload, 32));
-  // Reusing DeriveChainKeyOutput
+  uint8_t key[32];
+  TRY(omemoRandom(key, 32));
   struct DeriveChainKeyOutput kdfout[1];
-  TRY(DeriveKey(Zero32, payload, HkdfInfoPayload, kdfout));
+  TRY(DeriveKey(Zero32, key, HkdfInfoPayload, kdfout));
   // PKCS#7
   // TODO: describe how buffer `s` must be of n+extend size
   size_t extend = omemoGetMessagePadSize(n);
   memset(s+n, extend, extend);
-  mbedtls_aes_context aes;
-  if (mbedtls_aes_setkey_enc(&aes, kdfout->cipher, 256)
-   || mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, n+extend,
-                               kdfout->iv, s, d))
-    return OMEMO_ECRYPTO;
+  EncAesCbc(kdfout->cipher, n+extend, kdfout->iv, s, d);
   uint8_t mac[32];
-  // TODO: this should always return 0, we can assert
-  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), kdfout->mac,
-                      32, d, n+extend, mac) != 0)
-    return OMEMO_ECRYPTO;
+  Hmac(kdfout->mac, d, n+extend, mac);
+  memcpy(payload,    key, 32);
   memcpy(payload+32, mac, 16);
   memcpy(iv, kdfout->iv, 16);
   return 0;
