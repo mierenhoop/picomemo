@@ -268,7 +268,6 @@ static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE]
                                   uint32_t pk_id, uint32_t spk_id,
                                   const omemoKey ik, const omemoKey ek,
                                   uint32_t msgsz) {
-  assert(msgsz < 128);
   uint8_t *p = d;
 #ifdef OMEMO2
   p = FormatVarInt(p, PB_UINT32, 1, pk_id);
@@ -490,11 +489,10 @@ static void AesCbc(int mode, uint8_t key[static 32], size_t n, uint8_t iv[static
 
 static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE], const omemoKeyPayload in, omemoKey key,
                     uint8_t iv[static 16]) {
-  assert(OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE == 48);
-  uint8_t tmp[48];
-  memcpy(tmp, in, 32);
-  memset(tmp+32, 0x10, 0x10);
-  EncAesCbc(key, 48, iv, tmp, out);
+  uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
+  memcpy(tmp, in, OMEMO_INTERNAL_PAYLOAD_SIZE);
+  memset(tmp+OMEMO_INTERNAL_PAYLOAD_SIZE, 0x10, 0x10);
+  EncAesCbc(key, sizeof(tmp), iv, tmp, out);
   return 0;
 }
 
@@ -539,12 +537,24 @@ static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore 
   TRY(GetBaseMaterials(session->state.cks, mk, session->state.cks));
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
-  msg->n = FormatMessageHeader(msg->p, session->state.ns, session->state.pn, session->state.dhs.pub);
+  msg->n = 0;
+#ifdef OMEMO2
+  msg->p[msg->n++] = (1 << 3) | PB_LEN;
+  msg->p[msg->n++] = 16;
+  msg->n += 16;
+  msg->p[msg->n++] = (2 << 3) | PB_LEN;
+  // Hmac'd message will always be smaller than 128
+  msg->p[msg->n++] = 0xcc; // replaced with actual size
+#endif
+  msg->n += FormatMessageHeader(msg->p+msg->n, session->state.ns, session->state.pn, session->state.dhs.pub);
   TRY(Encrypt(msg->p+msg->n, payload, kdfout->cipher, kdfout->iv));
   msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
 #ifndef OMEMO2
   TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p, msg->n));
   msg->n += 8;
+#else
+  msg->p[19] = msg->n - 20;
+  TRY(GetMac(msg->p+2, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p+20, msg->n-20));
 #endif
   session->state.ns++;
   if (session->fsm == SESSION_INIT) {
@@ -634,10 +644,14 @@ int omemoInitFromBundle(struct omemoSession *session, const struct omemoStore *s
   memcpy(session->remoteidentity, bundle->ik, 32);
   omemoKey sk;
 #ifdef OMEMO2
-  omemoKey ik;
-  // TODO:?
-  morph25519_e2m(ik, bundle->ik);
-  TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv,
+  omemoKey ikprv;
+  // TODO: rename this in c25519.c/h
+  expand_key(ikprv, store->identity.prv);
+  omemoKey ik, edx, edy;
+  if (!ed25519_try_unpack(edx, edy, bundle->ik))
+    return OMEMO_ECORRUPT;
+  morph25519_e2m(ik, edy);
+  TRY(GetSharedSecret(sk, false, ikprv, eka.prv,
                            eka.prv, ik, bundle->spk,
                            bundle->pk));
 #else

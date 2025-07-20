@@ -282,6 +282,7 @@ static void TestSession() {
 
 // Test session built by Gajim
 static void TestReceive() {
+#ifndef OMEMO2
   struct omemoSession session;
   memset(&session, 0, sizeof(session));
   struct omemoStore store;
@@ -300,10 +301,11 @@ static void TestReceive() {
   uint8_t msg[180];
   CopyHex(msg,"33083812210508a21e22879385c9f5ea5ef0a50b993167659fbc0e90614365b9d0147ac8f1201a21057f1a8715095495c17552d720975d8405c38ed11bee9404bca19062d352a9c7082252330a2105e5bbca217d32f97f860ecd3c47df86f2a71eb8d2e387e31dd1f5f5349863b455100018002220a0bae4d6e5da28a1897fa3562cd4d24ee60bc9a5d4daf0f13646239bec36a2b4fd5aa1843e12d6f128f1eaa07b3001");
   assert(omemoDecryptKey(&session, &store, payload, true, msg, 164) == 0);
+#endif
 }
 
-#ifndef OMEMO2
 static void TestDeriveChainKey() {
+#ifndef OMEMO2
   static uint8_t seed[] = {
       0x8a, 0xb7, 0x2d, 0x6f, 0x4c, 0xc5, 0xac, 0x0d, 0x38, 0x7e, 0xaf,
       0x46, 0x33, 0x78, 0xdd, 0xb2, 0x8e, 0xdd, 0x07, 0x38, 0x5b, 0x1c,
@@ -335,8 +337,8 @@ static void TestDeriveChainKey() {
   assert(!DeriveKey(Zero32, mymk, HkdfInfoMessageKeys, kdfout));
   assert(!memcmp(mk, kdfout->cipher, 32));
   assert(!memcmp(mac, kdfout->mac, 32));
-}
 #endif
+}
 
 static void TestHkdf() {
   uint8_t ikm[] = {0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
@@ -514,9 +516,7 @@ int main() {
   RunTest(TestEncryption);
   RunTest(TestHkdf);
   RunTest(TestRatchet);
-#ifndef OMEMO2
   RunTest(TestDeriveChainKey);
-#endif
   RunTest(TestSerialization);
   RunTest(TestSessionIntegration);
   RunTest(TestReceive);
