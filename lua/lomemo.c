@@ -149,9 +149,15 @@ static int InitFromBundle(lua_State *L) {
   struct omemoBundle bundle = {0};
 #define C(ht, f) CopySizedField(L, 2, #f, sizeof(bundle.f), bundle.f, ht, LibName ": field '" #f "' not right size")
   C(0, spks);
+#ifdef OMEMO2
+  C(0, spk);
+  C(0, ik);
+  C(0, pk);
+#else
   C(1, spk);
   C(1, ik);
   C(1, pk);
+#endif
   lua_getfield(L, 2, "spk_id");
   lua_Integer spk_id = luaL_checkinteger(L, -1);
   lua_pop(L, 1);

@@ -16,13 +16,11 @@
         <location rdf:resource='https://github.com/mierenhoop/picomemo.git'/>
       </GitRepository>
     </repository>
-    <!-- We only implement a small part of this... -->
-    <implements rdf:resource='https://xmpp.org/rfcs/rfc6120.html'/>
     <implements>
       <xmpp:SupportedXep>
         <xmpp:xep rdf:resource='https://xmpp.org/extensions/xep-0384.html'/>
         <xmpp:status>partial</xmpp:status>
-        <xmpp:version>0.3.0</xmpp:version>
+        <xmpp:version>0.9.0</xmpp:version>
         <xmpp:note xml:lang='en'>Storage and XML (de)serialization should be handled by client.</xmpp:note>
       </xmpp:SupportedXep>
     </implements>

@@ -25,11 +25,18 @@ The file `omemo.c` contains a compact implementation of OMEMO.
 
 - Support multiple OMEMO versions at once.
 
-## OMEMO
+## `omemo.c`
 
  `omemo.c` contains implementations of X3DH, Double Ratchet and
  Protobuf with an API that is specifically tailored to OMEMO. We do not
  have dependencies on (any) libsignal or libolm code.
+
+Both OMEMO 0.3 (`eu.siacs.conversations.axolotl`) and OMEMO 0.9
+(`urn:xmpp:omemo:2`) are supported. By default OMEMO 0.3 is enabled and
+when compiled with `-DOMEMO2` the OMEMO 0.9 is enabled. That means only
+one is active at a time. It is possible to include both versions in a
+client by linking both separately as a shared library, which is done in
+the Lua bindings.
 
  Curve25519 and Ed25519 functions are handled by the
  [c25519](https://www.dlbeer.co.nz/oss/c25519.html) library, which is
@@ -43,9 +50,10 @@ The file `omemo.c` contains a compact implementation of OMEMO.
  of the [Everest](https://project-everest.github.io/) Curve25519
  implementation is enabled on supported systems.
 
- The version of OMEMO implemented is 0.3.0, updating this library to a
- newer version of OMEMO should be trivial, but supporting multiple
- versions at once will probably make the code a mess.
+## `lomemo`
+
+In the `lua` subdirectory there are Lua bindings for both versions of
+OMEMO. They are compiled as `lomemo.so` and `lomemo2.so`.
 
 ## Dependencies
 
@@ -54,6 +62,8 @@ The file `omemo.c` contains a compact implementation of OMEMO.
 - C99 compiler
 
 - docker-compose (for testing)
+
+- Lua 5.1-5.4 (for Lua bindings)
 
 ## Usage
 

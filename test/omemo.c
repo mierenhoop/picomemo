@@ -195,6 +195,14 @@ static void TestEncryption() {
   assert(!omemoDecryptMessage(decrypted, payload, sizeof(omemoKeyPayload), iv, encrypted, n));
 #endif
   assert(!memcmp(msg, decrypted, n));
+
+#ifdef OMEMO2
+  CopyHex(payload, "6820575d498eff7babf1d1c3e23358a515e439ac9b649c5a6b631256a7851f3f962a8aeecb68c146333aa690ff516f2f");
+  CopyHex(encrypted, "84890dc74a7f6fd7a1e22059e83bb4d1");
+  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(omemoKeyPayload), encrypted, 16));
+  assert(n == 9);
+  assert(!memcmp("plaintext", decrypted, 9));
+#endif
 }
 
 // user is either a or b
@@ -495,6 +503,18 @@ static void TestSessionIntegration() {
   memset(exp+16, 0xaa, 16);
 #endif
   assert(!memcmp(exp, payload, sizeof(exp)));
+
+  memset(payload, 0xcc, sizeof(payload));
+  struct omemoKeyMessage msg;
+  assert(!omemoEncryptKey(&session, &store, &msg, payload));
+#ifdef OMEMO2
+  f = fopen("o/resp2.bin", "w");
+#else
+  f = fopen("o/resp.bin", "w");
+#endif
+  assert(f);
+  assert(fwrite(msg.p, 1, msg.n, f) == msg.n);
+  fclose(f);
 }
 
 #define RunTest(t)                                                     \

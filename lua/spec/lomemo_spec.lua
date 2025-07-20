@@ -1,7 +1,7 @@
 local lomemo = require"lomemo"
 
 -- We premake the stores, it takes 0.08 sec/store which adds up quick
-local store1bin, store2bin = io.open("../o/store1.bin"):read"*a", io.open("../o/store1.bin"):read"*a"
+local store1bin, store2bin = io.open("../o/storea1.bin"):read"*a", io.open("../o/storeb1.bin"):read"*a"
 
 describe("lomemo", function()
   describe("store", function()

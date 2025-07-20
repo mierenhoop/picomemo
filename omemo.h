@@ -37,23 +37,15 @@
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
 #define OMEMO_INTERNAL_HEADER_MAXSIZE (2+16+2+2*6+34+2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE (OMEMO_INTERNAL_HEADER_MAXSIZE+OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE)
+#define OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE (6*2+34*2+3)
+#define OMEMO_INTERNAL_ENCRYPTED_MAXSIZE OMEMO_INTERNAL_FULLMSG_MAXSIZE
 #else
 #define OMEMO_INTERNAL_PAYLOAD_SIZE 32
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 48
 #define OMEMO_INTERNAL_HEADER_MAXSIZE (2+33+2*6+2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE (1+OMEMO_INTERNAL_HEADER_MAXSIZE+OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE)
-#endif
-#define OMEMO_INTERNAL_ENCRYPTED_MAXSIZE (OMEMO_INTERNAL_FULLMSG_MAXSIZE+8)
-#ifdef OMEMO2
-#define OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE (6*2+34*2+3)
-#else
 #define OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE (1+3*6+35*2+2)
-#endif
-
-#ifdef OMEMO2
-#define omemoGetMessagePadSize(n) (16-(n%16))
-#else
-#define omemoGetMessagePadSize(n) 0
+#define OMEMO_INTERNAL_ENCRYPTED_MAXSIZE (OMEMO_INTERNAL_FULLMSG_MAXSIZE+8)
 #endif
 
 typedef uint8_t omemoKey[32];
@@ -223,11 +215,14 @@ int omemoEncryptKey(struct omemoSession *session, const struct omemoStore *store
 int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omemoKeyPayload payload, bool isprekey, const uint8_t *msg, size_t msgn);
 
 #ifdef OMEMO2
+#define omemoGetMessagePadSize(n) (16-(n%16))
 /**
  * Encrypt message which will be stored in the <payload> element.
  *
  * @param payload (out) will contain the encrypted 
- * @param n is the size of the buffer in d and s
+ * @param s is a mutable buffer containing the plaintext message with `omemoGetMessagePadSize(n)` amount of bytes reserved at the end
+ * @param d is the destination buffer that is the same size as s
+ * @param n is the original message size
  */
 int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload, uint8_t *s,
                         size_t n);

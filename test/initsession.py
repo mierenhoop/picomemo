@@ -77,7 +77,6 @@ async def run_twomemo():
     ser=ses.key_exchange.serialize(msg.serialize())
     with open("o/msg2.bin", "wb") as f:
         f.write(ser)
-    pass
 
 async def main():
     if OMEMO2:

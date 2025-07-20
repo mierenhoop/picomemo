@@ -292,17 +292,17 @@ static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE]
 static size_t FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE], uint32_t n,
                                   uint32_t pn, const omemoKey dhs) {
   uint8_t *p = d;
-#ifndef OMEMO2
+#ifdef OMEMO2
+  p = FormatVarInt(p, PB_UINT32, 1, n);
+  p = FormatVarInt(p, PB_UINT32, 2, pn);
+  p = FormatKey(p, 3, dhs);
+  *p++ = (4 << 3) | PB_LEN;
+  *p++ = OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
+#else
   *p++ = (3 << 4) | 3;
   p = FormatSerializedKey(p, 1, dhs);
   p = FormatVarInt(p, PB_UINT32, 2, n);
   p = FormatVarInt(p, PB_UINT32, 3, pn);
-  *p++ = (4 << 3) | PB_LEN;
-  *p++ = OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
-#else
-  p = FormatVarInt(p, PB_UINT32, 1, n);
-  p = FormatVarInt(p, PB_UINT32, 2, pn);
-  p = FormatKey(p, 3, dhs);
   *p++ = (4 << 3) | PB_LEN;
   *p++ = OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
 #endif
@@ -549,12 +549,12 @@ static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore 
   msg->n += FormatMessageHeader(msg->p+msg->n, session->state.ns, session->state.pn, session->state.dhs.pub);
   TRY(Encrypt(msg->p+msg->n, payload, kdfout->cipher, kdfout->iv));
   msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
-#ifndef OMEMO2
-  TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p, msg->n));
-  msg->n += 8;
-#else
+#ifdef OMEMO2
   msg->p[19] = msg->n - 20;
   TRY(GetMac(msg->p+2, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p+20, msg->n-20));
+#else
+  TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p, msg->n));
+  msg->n += 8;
 #endif
   session->state.ns++;
   if (session->fsm == SESSION_INIT) {
@@ -744,19 +744,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
                               const struct omemoStore *store,
                               omemoKeyPayload decrypted, const uint8_t *msg,
                               size_t msgn) {
-#ifndef OMEMO2
-  if (msgn < 9 || msg[0] != ((3 << 4) | 3))
-    return OMEMO_ECORRUPT;
-  struct ProtobufField fields[5] = {
-    [PbMsg_dh_pub]     = {PB_REQUIRED | PB_LEN, SerLen},
-    [PbMsg_n]          = {PB_REQUIRED | PB_UINT32},
-    [PbMsg_pn]         = {PB_REQUIRED | PB_UINT32},
-    [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
-  };
-  if (ParseProtobuf(msg+1, msgn-9, fields, 5))
-    return OMEMO_EPROTOBUF;
-  const uint8_t *realmac = msg+msgn-8;
-#else
+#ifdef OMEMO2
   struct ProtobufField fields1[3] = {
     [1] = {PB_REQUIRED | PB_LEN, 16}, // mac
     [2] = {PB_REQUIRED | PB_LEN},     // message
@@ -773,13 +761,25 @@ static int DecryptKeyImpl(struct omemoSession *session,
   if (ParseProtobuf(fields1[2].p, fields1[2].v, fields, 5))
     return OMEMO_EPROTOBUF;
   const uint8_t *realmac = fields1[1].p;
+#else
+  if (msgn < 9 || msg[0] != ((3 << 4) | 3))
+    return OMEMO_ECORRUPT;
+  struct ProtobufField fields[5] = {
+    [PbMsg_dh_pub]     = {PB_REQUIRED | PB_LEN, SerLen},
+    [PbMsg_n]          = {PB_REQUIRED | PB_UINT32},
+    [PbMsg_pn]         = {PB_REQUIRED | PB_UINT32},
+    [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
+  };
+  if (ParseProtobuf(msg+1, msgn-9, fields, 5))
+    return OMEMO_EPROTOBUF;
+  const uint8_t *realmac = msg+msgn-8;
 #endif
 
-#ifndef OMEMO2
-  if (fields[PbMsg_ciphertext].v > 48 || fields[PbMsg_ciphertext].v < 32)
+#ifdef OMEMO2
+  if (fields[PbMsg_ciphertext].v != 64)
     return OMEMO_ECORRUPT;
 #else
-  if (fields[PbMsg_ciphertext].v != 64)
+  if (fields[PbMsg_ciphertext].v > 48 || fields[PbMsg_ciphertext].v < 32)
     return OMEMO_ECORRUPT;
 #endif
 
@@ -822,10 +822,10 @@ static int DecryptKeyImpl(struct omemoSession *session,
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   uint8_t mac[MACSIZE];
-#ifndef OMEMO2
-  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, msg, msgn-8));
-#else
+#ifdef OMEMO2
   TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, fields1[2].p, fields1[2].v));
+#else
+  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, msg, msgn-8));
 #endif
   if (memcmp(mac, realmac, MACSIZE))
     return OMEMO_ECORRUPT;
@@ -969,7 +969,6 @@ int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, key, HkdfInfoPayload, kdfout));
   // PKCS#7
-  // TODO: describe how buffer `s` must be of n+extend size
   size_t extend = omemoGetMessagePadSize(n);
   memset(s+n, extend, extend);
   EncAesCbc(kdfout->cipher, n+extend, kdfout->iv, s, d);
