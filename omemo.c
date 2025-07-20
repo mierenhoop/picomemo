@@ -644,7 +644,7 @@ int omemoInitFromBundle(struct omemoSession *session, const struct omemoStore *s
   memcpy(session->remoteidentity, bundle->ik, 32);
   omemoKey sk;
 #ifdef OMEMO2
-  omemoKey ikprv;
+  uint8_t ikprv[64];
   // TODO: rename this in c25519.c/h
   expand_key(ikprv, store->identity.prv);
   omemoKey ik, edx, edy;
@@ -876,7 +876,7 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
       omemoKey sk;
       memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p), 32);
 #ifdef OMEMO2
-      omemoKey ikprv;
+      uint8_t ikprv[64];
       // TODO: rename this in c25519.c/h
       expand_key(ikprv, store->identity.prv);
       omemoKey ik, edx, edy;
