@@ -107,6 +107,26 @@ Verify an Ed25519 signature.
 bool
 Hacl_Ed25519_verify(uint8_t *public_key, uint32_t msg_len, uint8_t *msg, uint8_t *signature);
 
+void Hacl_Ed25519_sign_modified(
+  uint8_t *signature,
+  uint8_t *public_key,
+  uint8_t *s,
+  uint8_t *msg,
+  uint32_t msg_len
+);
+
+void Hacl_Ed25519_pub_from_Curve25519_sec(
+    uint8_t *pub,
+    uint8_t *sec);
+
+void Hacl_Ed25519_secret_expand_low(
+    uint8_t *expanded,
+    uint8_t *sec);
+
+bool Hacl_Ed25519_pub_to_Curve25519_pub(
+    uint8_t *m,
+    uint8_t *e);
+
 #if defined(__cplusplus)
 }
 #endif

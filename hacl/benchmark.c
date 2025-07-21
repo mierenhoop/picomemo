@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <assert.h>
 
 #include <sys/random.h>
 #include "Hacl_Curve25519_51.h"
@@ -42,15 +43,42 @@ void Mx2Ey(uint8_t ey8[32], uint8_t mx8[32]) {
   Hacl_Bignum25519_store_51(ey8, ey);
 }
 
+static void ConvertCurvePrvToEdPub(uint8_t ed[32], const uint8_t prv[32]) {
+  struct ed25519_pt p;
+  ed25519_smult(&p, &ed25519_base, prv);
+  uint8_t x[F25519_SIZE];
+  uint8_t y[F25519_SIZE];
+  ed25519_unproject(x, y, &p);
+  ed25519_pack(ed, x, y);
+}
+
+void Calc(uint8_t sig[64], uint8_t prv[32], uint8_t msg[33]) {
+  uint8_t ed[32];
+  //uint8_t msgbuf[33+64];
+  //int sign = 0;
+  //memcpy(msgbuf, msg, 33);
+  //memset(msgbuf+33, 0xcc, 64);
+  //ConvertCurvePrvToEdPub(ed, prv);
+  //sign = ed[31] & 0x80;
+  //edsign_sign_modified(sig, ed, prv, msgbuf, 33);
+  //sig[63] &= 0x7f;
+  //sig[63] |= sign;
+  //for (int i=0;i<64;i++) printf("%02x",sig[i]);
+  //puts("");
+  //Hacl_Ed25519_sign_modified(sig, ed, prv, msgbuf, 33);
+  //for (int i=0;i<64;i++) printf("%02x",sig[i]);
+  //puts("");
+}
+
 int main() {
   uint8_t prv[32], pub[32], sig[64], edx[32], edy[32];
   const char *msg = "fjdakfjadkffjkadjfkadfjja";
   getrandom(prv, 32, 0);
-  //c25519_prepare(prv);
-  //c25519_smult(pub, c25519_base_x, prv);
-  ed25519_prepare(prv);
-  Hacl_Ed25519_secret_to_public(pub, prv);
-  ed25519_try_unpack(edx, edy, pub);
+  c25519_prepare(prv);
+  c25519_smult(pub, c25519_base_x, prv);
+  //ed25519_prepare(prv);
+  //Hacl_Ed25519_secret_to_public(pub, prv);
+  //ed25519_try_unpack(edx, edy, pub);
   //Hacl_Ed25519_sign(sig, prv, sizeof(msg), msg);
   for (int i = 0; i < 1000; i++)
 #ifdef HACL
@@ -60,7 +88,8 @@ int main() {
     //Hacl_Ed25519_verify(pub, sizeof(msg), msg, sig);
     //TryUnpackY(edy, pub);
     //Mx2Ey(edy, pub);
-    E2M(pub, edy);
+    //E2M(pub, edy);
+    Hacl_Ed25519_pub_from_Curve25519_sec(pub, prv);
     //;
 #else
     //edsign_sec_to_pub(pub, prv);
@@ -72,7 +101,8 @@ int main() {
     //morph25519_mx2ey(edy, pub);
     //expand_key(sig, prv);
     //morph25519_mx2ey(edy, pub);
-    morph25519_e2m(pub, edy);
+    //morph25519_e2m(pub, edy);
+    ConvertCurvePrvToEdPub(pub, prv);
     //;
 #endif
 
@@ -94,9 +124,14 @@ int main() {
   //Mx2Ey(ey, pub);
   //for (int i = 0; i < 32; i++) printf("%02x", ey[i]);
   //puts("");
+  uint8_t serkey[33];
+  memset(serkey, 0xaa, 33);
+  Calc(sig, prv, serkey);
+  //ConvertCurvePrvToEdPub();
 }
 
 
+//                                1000 iters
 // c25519 smult/sec_to_pub  ~90x   ~.05 / 4.4
 // ed25519 sec_to_pub       ~90x   ~.05 / 4.4
 // sign                     ~50x   ~.08 / 3.9
@@ -105,4 +140,4 @@ int main() {
 // morph25519_mx2ey                ~.01 / 0.4
 // ed25519_try_unpack              ~.01 / 0.7
 // expand_key/secret_expand               0.0
-// TODO: edsign_sign_modified
+// c prv -> ed pub                 ~.05 / 4.2

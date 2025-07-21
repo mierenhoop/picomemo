@@ -1839,3 +1839,60 @@ Hacl_Ed25519_verify(uint8_t *public_key, uint32_t msg_len, uint8_t *msg, uint8_t
   return false;
 }
 
+void Hacl_Ed25519_sign_modified(
+  uint8_t *signature,
+  uint8_t *public_key,
+  uint8_t *s,
+  uint8_t *msg,
+  uint32_t msg_len
+)
+{
+  signature[0] = 0xfe;
+  memset(signature + 1, 0xff, 31);
+  memcpy(signature + 32, s, 32);
+  uint8_t *rs = signature;
+  uint8_t *ss = signature + 32U;
+  uint64_t rq[5U] = { 0U };
+  uint64_t hq[5U] = { 0U };
+  uint8_t rb[32U] = { 0U };
+  sha512_modq_pre_pre2(rq, signature, signature + 32, msg_len + 64, msg);
+  store_56(rb, rq);
+  point_mul_g_compress(rs, rb);
+  sha512_modq_pre_pre2(hq, rs, public_key, msg_len, msg);
+  uint64_t aq[5U] = { 0U };
+  load_32_bytes(aq, s);
+  mul_modq(aq, hq, aq);
+  add_modq(aq, rq, aq);
+  store_56(ss, aq);
+}
+
+void Hacl_Ed25519_pub_from_Curve25519_sec(
+    uint8_t *pub,
+    uint8_t *sec) {
+  point_mul_g_compress(pub, sec);
+}
+
+void Hacl_Ed25519_secret_expand_low(
+    uint8_t *expanded,
+    uint8_t *sec) {
+  uint8_t full[64];
+  secret_expand(full, sec);
+  memcpy(expanded, full, 32);
+}
+
+bool Hacl_Ed25519_pub_to_Curve25519_pub(
+    uint8_t *m,
+    uint8_t *e) {
+  uint64_t o[20], um[5], yplus[5], yminus[5], one[5] = {1,0,0,0,0};
+  if (!Hacl_Impl_Ed25519_PointDecompress_point_decompress(o, e))
+    return false;
+  Hacl_Impl_Curve25519_Field51_fsub(yplus, one, o+5);
+  Hacl_Bignum25519_inverse(yminus, yplus);
+  Hacl_Impl_Curve25519_Field51_fadd(yplus, one, o+5);
+  FStar_UInt128_uint128 tmp[10];
+  for (int i = 0; i < 10; i++)
+    tmp[i] = FStar_UInt128_uint64_to_uint128(0);
+  Hacl_Impl_Curve25519_Field51_fmul(um, yplus, yminus, tmp);
+  Hacl_Bignum25519_store_51(m, um);
+  return true;
+}
