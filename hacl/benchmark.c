@@ -3,30 +3,106 @@
 #include <sys/random.h>
 #include "Hacl_Curve25519_51.h"
 #include "Hacl_Ed25519.h"
+#include "internal/Hacl_Ed25519.h"
+#include "internal/Hacl_Bignum25519_51.h"
 #include "../c25519.h"
 
+bool TryUnpackY(uint8_t y[32], uint8_t pub[32]) {
+  // TODO: we only need to run the x part of decompress
+  uint64_t o[20];
+  if (!Hacl_Impl_Ed25519_PointDecompress_point_decompress(o, pub))
+    return false;
+  Hacl_Bignum25519_store_51(y, o+5);
+  return true;
+}
+
+void E2M(uint8_t m8[32], uint8_t y8[32]) {
+  uint64_t m[5], y[5], yplus[5], yminus[5], one[5] = {1,0,0,0,0};
+  Hacl_Bignum25519_load_51(y, y8);
+  Hacl_Impl_Curve25519_Field51_fsub(yplus, one, y);
+  Hacl_Bignum25519_inverse(yminus, yplus);
+  Hacl_Impl_Curve25519_Field51_fadd(yplus, one, y);
+  FStar_UInt128_uint128 tmp[10];
+  for (int i = 0; i < 10; i++)
+    tmp[i] = FStar_UInt128_uint64_to_uint128(0);
+  Hacl_Impl_Curve25519_Field51_fmul(m, yplus, yminus, tmp);
+  Hacl_Bignum25519_store_51(m8, m);
+}
+
+void Mx2Ey(uint8_t ey8[32], uint8_t mx8[32]) {
+  uint64_t ey[5], mx[5], n[5], d[5], one[5] = {1,0,0,0,0};
+  Hacl_Bignum25519_load_51(mx, mx8);
+  Hacl_Impl_Curve25519_Field51_fadd(n, mx, one);
+  Hacl_Bignum25519_inverse(d, n);
+  Hacl_Impl_Curve25519_Field51_fsub(n, mx, one);
+  FStar_UInt128_uint128 tmp[10];
+  for (int i = 0; i < 10; i++)
+    tmp[i] = FStar_UInt128_uint64_to_uint128(0);
+  Hacl_Impl_Curve25519_Field51_fmul(ey, n, d, tmp);
+  Hacl_Bignum25519_store_51(ey8, ey);
+}
+
 int main() {
-  uint8_t prv[32], pub[32], sig[64];
+  uint8_t prv[32], pub[32], sig[64], edx[32], edy[32];
   const char *msg = "fjdakfjadkffjkadjfkadfjja";
   getrandom(prv, 32, 0);
+  //c25519_prepare(prv);
+  //c25519_smult(pub, c25519_base_x, prv);
   ed25519_prepare(prv);
   Hacl_Ed25519_secret_to_public(pub, prv);
-  Hacl_Ed25519_sign(sig, prv, sizeof(msg), msg);
+  ed25519_try_unpack(edx, edy, pub);
+  //Hacl_Ed25519_sign(sig, prv, sizeof(msg), msg);
   for (int i = 0; i < 1000; i++)
 #ifdef HACL
     //Hacl_Ed25519_secret_to_public(pub, prv);
     //Hacl_Curve25519_51_secret_to_public(pub, prv);
     //Hacl_Ed25519_sign(sig, prv, sizeof(msg), msg);
-    Hacl_Ed25519_verify(pub, sizeof(msg), msg, sig);
+    //Hacl_Ed25519_verify(pub, sizeof(msg), msg, sig);
+    //TryUnpackY(edy, pub);
+    //Mx2Ey(edy, pub);
+    E2M(pub, edy);
+    //;
 #else
     //edsign_sec_to_pub(pub, prv);
     //c25519_smult(pub, c25519_base_x, prv);
     //edsign_sign(sig, pub, prv, msg, sizeof(msg));
-    edsign_verify(sig, pub, msg, sizeof(msg));
+    //edsign_verify(sig, pub, msg, sizeof(msg));
+    //morph25519_e2m(pub, edy);
+    //ed25519_try_unpack(edx, edy, pub);
+    //morph25519_mx2ey(edy, pub);
+    //expand_key(sig, prv);
+    //morph25519_mx2ey(edy, pub);
+    morph25519_e2m(pub, edy);
+    //;
 #endif
+
+  //ed25519_try_unpack(edx, edy, pub);
+  //morph25519_e2m(pub, edy);
+  //for (int i = 0; i < 32; i++) printf("%02x", pub[i]);
+  //puts("");
+  //E2M(pub, edy);
+  //for (int i = 0; i < 32; i++) printf("%02x", pub[i]);
+  //puts("");
+  //uint8_t y[32];
+  //TryUnpackY(y, pub);
+  //for (int i = 0; i < 32; i++) printf("%02x", y[i]);
+  //puts("");
+  //uint8_t ey[32];
+  //morph25519_mx2ey(ey, pub);
+  //for (int i = 0; i < 32; i++) printf("%02x", ey[i]);
+  //puts("");
+  //Mx2Ey(ey, pub);
+  //for (int i = 0; i < 32; i++) printf("%02x", ey[i]);
+  //puts("");
 }
+
 
 // c25519 smult/sec_to_pub  ~90x   ~.05 / 4.4
 // ed25519 sec_to_pub       ~90x   ~.05 / 4.4
 // sign                     ~50x   ~.08 / 3.9
 // verify                   ~110x  ~.08 / 9.8
+// morph25519_e2m                  ~.01 / 0.4
+// morph25519_mx2ey                ~.01 / 0.4
+// ed25519_try_unpack              ~.01 / 0.7
+// expand_key/secret_expand               0.0
+// TODO: edsign_sign_modified
