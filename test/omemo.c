@@ -517,6 +517,17 @@ static void TestSessionIntegration() {
   fclose(f);
 }
 
+static void TestMediaEncryption() {
+  char file[100], enc[100];
+  strcpy(file, "plaintext");
+  size_t n = 9;
+  omemoMediaKey k;
+  assert(!omemoEncryptMedia(enc, enc+n, k, file, n));
+  memset(file, 0, sizeof(file));
+  assert(!omemoDecryptMedia(file, k, enc, n+16));
+  assert(!memcmp(file, "plaintext", n));
+}
+
 #define RunTest(t)                                                     \
   do {                                                                 \
     puts("\e[34mRunning test " #t "\e[0m");                            \
@@ -541,5 +552,6 @@ int main() {
   RunTest(TestSessionIntegration);
   RunTest(TestReceive);
   RunTest(TestSession);
+  RunTest(TestMediaEncryption);
   puts("All tests succeeded");
 }

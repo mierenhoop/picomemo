@@ -1151,3 +1151,31 @@ int omemoDeserializeSession(const char *p, size_t n, struct omemoSession *sessio
   session->fsm = fields[14].v;
   return 0;
 }
+
+/****************** XEP-0454: OMEMO Media sharing ********************/
+
+typedef uint8_t omemoMediaKey[44];
+
+int omemoEncryptMedia(uint8_t *d, uint8_t tag[16], omemoMediaKey k, const uint8_t *s, size_t n) {
+  int r = 0;
+  if ((r = omemoRandom(k,    12))
+   || (r = omemoRandom(k+12, 32)))
+   return r;
+  mbedtls_gcm_context ctx;
+  mbedtls_gcm_init(&ctx);
+  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, k+12, 256)))
+    r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, k, 12, "", 0, s, d, 16, tag);
+  mbedtls_gcm_free(&ctx);
+  return r ? OMEMO_ECRYPTO : 0;
+}
+
+int omemoDecryptMedia(uint8_t *d, const omemoMediaKey k, const uint8_t *s, size_t n) {
+  if (n < 16) return OMEMO_ECORRUPT;
+  int r = 0;
+  mbedtls_gcm_context ctx;
+  mbedtls_gcm_init(&ctx);
+  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, k+12, 256)))
+    r = mbedtls_gcm_auth_decrypt(&ctx, n-16, k, 12, "", 0, s+n-16, 16, s, d);
+  mbedtls_gcm_free(&ctx);
+  return r ? OMEMO_ECRYPTO : 0;
+}

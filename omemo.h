@@ -257,4 +257,10 @@ int omemoDecryptMessage(uint8_t *d, size_t *outn, const uint8_t *payload, size_t
 int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n);
 #endif
 
+typedef uint8_t omemoMediaKey[44];
+
+int omemoEncryptMedia(uint8_t *d, uint8_t tag[16], omemoMediaKey k, const uint8_t *s, size_t n);
+
+int omemoDecryptMedia(uint8_t *d, const omemoMediaKey k, const uint8_t *s, size_t n);
+
 #endif
