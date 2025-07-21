@@ -1,26 +1,28 @@
 /**
  * Copyright 2024 mierenhoop
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
+ * Permission to use, copy, modify, and/or distribute this software for
+ * any purpose with or without fee is hereby granted, provided that the
+ * above copyright notice and this permission notice appear in all
+ * copies.
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+ * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+ * AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+ * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <mbedtls/hkdf.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/gcm.h>
+#include <mbedtls/hkdf.h>
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "c25519.h"
@@ -39,11 +41,11 @@
 #define PbMsg_dh_pub     3
 #define PbMsg_ciphertext 4
 
-#define PbKeyEx_pk_id      1
-#define PbKeyEx_spk_id     2
-#define PbKeyEx_ik         3
-#define PbKeyEx_ek         4
-#define PbKeyEx_message    5
+#define PbKeyEx_pk_id   1
+#define PbKeyEx_spk_id  2
+#define PbKeyEx_ik      3
+#define PbKeyEx_ek      4
+#define PbKeyEx_message 5
 
 #else
 
@@ -56,19 +58,19 @@
 #define PbMsg_dh_pub     1
 #define PbMsg_ciphertext 4
 
-#define PbKeyEx_pk_id      1
-#define PbKeyEx_spk_id     6
-#define PbKeyEx_ik         3
-#define PbKeyEx_ek         2
-#define PbKeyEx_message    4
+#define PbKeyEx_pk_id   1
+#define PbKeyEx_spk_id  6
+#define PbKeyEx_ik      3
+#define PbKeyEx_ek      2
+#define PbKeyEx_message 4
 
 #endif
 
-#define TRY(expr) \
-  do { \
-    int _r_; \
-    if ((_r_ = expr)) \
-      return _r_; \
+#define TRY(expr)                                                      \
+  do {                                                                 \
+    int _r_;                                                           \
+    if ((_r_ = expr))                                                  \
+      return _r_;                                                      \
   } while (0)
 
 enum {
@@ -79,7 +81,7 @@ enum {
 
 #define SerLen sizeof(omemoSerializedKey)
 
-void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
+OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
 #ifdef OMEMO2
   memcpy(k, pub, SerLen);
 #else
@@ -93,7 +95,7 @@ static inline const uint8_t *GetDeser(const omemoSerializedKey k) {
 #ifdef OMEMO2
   return k;
 #else
-  return k+1;
+  return k + 1;
 #endif
 }
 
@@ -103,19 +105,20 @@ static inline const uint8_t *GetDeser(const omemoSerializedKey k) {
 
 // Only supports uint32 and len prefixed (by int32).
 struct ProtobufField {
-  int type; // PB_*
-  uint32_t v; // destination varint or LEN
+  int type;         // PB_*
+  uint32_t v;       // destination varint or LEN
   const uint8_t *p; // LEN element data pointer or NULL
 };
 
 #define PB_REQUIRED (1 << 3)
-#define PB_UINT32 0
-#define PB_LEN 2
+#define PB_UINT32   0
+#define PB_LEN      2
 
 /**
  * Parse Protobuf varint.
  *
- * Only supports uint32, higher bits are skipped so it will neither overflow nor clamp to UINT32_MAX.
+ * Only supports uint32, higher bits are skipped so it will neither
+ * overflow nor clamp to UINT32_MAX.
  *
  * @param s points to the location of the varint in the protobuf data
  * @param e points to the end of the protobuf data
@@ -124,7 +127,8 @@ struct ProtobufField {
  * @returns pointer to first byte after the varint or NULL if parsing is
  * not finished before reaching e
  */
-static const uint8_t *ParseVarInt(const uint8_t *s, const uint8_t *e, uint32_t *v) {
+static const uint8_t *ParseVarInt(const uint8_t *s, const uint8_t *e,
+                                  uint32_t *v) {
   int i = 0;
   *v = 0;
   do {
@@ -158,7 +162,7 @@ static const uint8_t *ParseVarInt(const uint8_t *s, const uint8_t *e, uint32_t *
  * @returns false if successful, true if error
  */
 static bool ParseProtobuf(const uint8_t *s, size_t n,
-                         struct ProtobufField *fields, int nfields) {
+                          struct ProtobufField *fields, int nfields) {
   int type, id;
   uint32_t v;
   const uint8_t *e = s + n;
@@ -195,7 +199,8 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
 
 // TODO: can we incorporate this in ParseProtobuf?
 static bool ParseRepeatingField(const uint8_t *s, size_t n,
-                         struct ProtobufField *field, int fieldid) {
+                                struct ProtobufField *field,
+                                int fieldid) {
   int type, id;
   uint32_t v;
   const uint8_t *e = s + n;
@@ -231,7 +236,8 @@ static inline int GetVarIntSize(uint32_t v) {
          (v > 0xfffffff);
 }
 
-static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id, uint32_t v) {
+static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id,
+                             uint32_t v) {
   assert(id < 16);
   *d++ = (id << 3) | type;
   do {
@@ -243,7 +249,8 @@ static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id, uint32_t v) 
 }
 
 #ifndef OMEMO2
-static uint8_t *FormatSerializedKey(uint8_t d[35], int id, const omemoKey k) {
+static uint8_t *FormatSerializedKey(uint8_t d[35], int id,
+                                    const omemoKey k) {
   assert(id < 16);
   *d++ = (id << 3) | PB_LEN;
   *d++ = 33;
@@ -264,10 +271,10 @@ static uint8_t *FormatKey(uint8_t d[34], int id, const omemoKey k) {
 // appended right after this call).
 // This is OMEMOMessage in schema
 // NOTE: OMEMO2 COMPLIANT
-static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
-                                  uint32_t pk_id, uint32_t spk_id,
-                                  const omemoKey ik, const omemoKey ek,
-                                  uint32_t msgsz) {
+static size_t
+FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
+                    uint32_t pk_id, uint32_t spk_id, const omemoKey ik,
+                    const omemoKey ek, uint32_t msgsz) {
   uint8_t *p = d;
 #ifdef OMEMO2
   p = FormatVarInt(p, PB_UINT32, 1, pk_id);
@@ -289,8 +296,9 @@ static size_t FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE]
 
 // Format Protobuf WhisperMessage without ciphertext.
 //  HEADER(dh_pair, pn, n)
-static size_t FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE], uint32_t n,
-                                  uint32_t pn, const omemoKey dhs) {
+static size_t
+FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE],
+                    uint32_t n, uint32_t pn, const omemoKey dhs) {
   uint8_t *p = d;
 #ifdef OMEMO2
   p = FormatVarInt(p, PB_UINT32, 1, n);
@@ -322,7 +330,9 @@ static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
 }
 #endif
 
-static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey prv, const uint8_t *msg, size_t msgn) {
+static int CalculateCurveSignature(omemoCurveSignature sig,
+                                   const omemoKey prv,
+                                   const uint8_t *msg, size_t msgn) {
 #ifdef OMEMO2
   omemoKey pub;
   // TODO: can we reuse idkp->pub
@@ -332,10 +342,10 @@ static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey prv, 
 #else
   assert(msgn <= 33);
   omemoKey ed;
-  uint8_t msgbuf[33+64];
+  uint8_t msgbuf[33 + 64];
   int sign = 0;
   memcpy(msgbuf, msg, msgn);
-  TRY(omemoRandom(msgbuf+msgn, 64));
+  TRY(omemoRandom(msgbuf + msgn, 64));
   ConvertCurvePrvToEdPub(ed, prv);
   sign = ed[31] & 0x80;
   edsign_sign_modified(sig, ed, prv, msgbuf, msgn);
@@ -346,9 +356,12 @@ static int CalculateCurveSignature(omemoCurveSignature sig, const omemoKey prv, 
 }
 
 //  Sig(PK, M)
-static bool VerifySignature(const omemoCurveSignature sig, const omemoKey pub, const uint8_t *msg, size_t msgn) {
+static bool VerifySignature(const omemoCurveSignature sig,
+                            const omemoKey pub, const uint8_t *msg,
+                            size_t msgn) {
 #ifdef OMEMO2
-  // TODO: pub is bundle->ik in ed25519 form, we might still have to force a sign bit
+  // TODO: pub is bundle->ik in ed25519 form, we might still have to
+  // force a sign bit
   return !!edsign_verify(sig, pub, msg, msgn);
 #else
   omemoKey ed;
@@ -386,14 +399,13 @@ static int GeneratePreKey(struct omemoPreKey *pk, uint32_t id) {
 }
 
 static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
-                                 uint32_t id,
-                                 const struct omemoKeyPair *idkp) {
+                                uint32_t id,
+                                const struct omemoKeyPair *idkp) {
   omemoSerializedKey ser;
   spk->id = id;
   TRY(GenerateKeyPair(&spk->kp));
   omemoSerializeKey(ser, spk->kp.pub);
-  return CalculateCurveSignature(spk->sig, idkp->prv, ser,
-                          SerLen);
+  return CalculateCurveSignature(spk->sig, idkp->prv, ser, SerLen);
 }
 
 /****************************** STORE ********************************/
@@ -403,14 +415,14 @@ static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
   return n + !n;
 }
 
-int omemoRefillPreKeys(struct omemoStore *store) {
+OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store) {
   int i;
   for (i = 0; i < OMEMO_NUMPREKEYS; i++) {
     if (!store->prekeys[i].id) {
       struct omemoPreKey pk;
       uint32_t n = IncrementWrapSkipZero(store->pkcounter);
       TRY(GeneratePreKey(&pk, n));
-      memcpy(store->prekeys+i, &pk, sizeof(struct omemoPreKey));
+      memcpy(store->prekeys + i, &pk, sizeof(struct omemoPreKey));
       store->pkcounter = n;
     }
   }
@@ -424,13 +436,14 @@ static int omemoSetupStoreImpl(struct omemoStore *store) {
 #else
   TRY(GenerateKeyPair(&store->identity));
 #endif
-  TRY(GenerateSignedPreKey(&store->cursignedprekey, 1, &store->identity));
+  TRY(GenerateSignedPreKey(&store->cursignedprekey, 1,
+                           &store->identity));
   TRY(omemoRefillPreKeys(store));
   store->isinitialized = true;
   return 0;
 }
 
-int omemoSetupStore(struct omemoStore *store) {
+OMEMO_EXPORT int omemoSetupStore(struct omemoStore *store) {
   int r;
   if ((r = omemoSetupStoreImpl(store)))
     memset(store, 0, sizeof(struct omemoStore));
@@ -439,7 +452,7 @@ int omemoSetupStore(struct omemoStore *store) {
 
 /*********************************************************************/
 
-#define ADSIZE (2*SerLen)
+#define ADSIZE (2 * SerLen)
 #ifdef OMEMO2
 #define MACSIZE 16
 #else
@@ -447,8 +460,9 @@ int omemoSetupStore(struct omemoStore *store) {
 #endif
 
 //  AD = Encode(IKA) || Encode(IKB)
-static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika, const omemoKey ikb) {
-  omemoSerializeKey(ad,          ika);
+static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika,
+                  const omemoKey ikb) {
+  omemoSerializeKey(ad, ika);
   omemoSerializeKey(ad + SerLen, ikb);
 }
 
@@ -469,12 +483,14 @@ static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
   uint8_t macinput[ADSIZE + OMEMO_INTERNAL_FULLMSG_MAXSIZE], mac[32];
   GetAd(macinput, ika, ikb);
   memcpy(macinput + ADSIZE, msg, msgn);
-  Hmac(mk, macinput, ADSIZE+msgn, mac);
+  Hmac(mk, macinput, ADSIZE + msgn, mac);
   memcpy(d, mac, MACSIZE);
   return 0;
 }
 
-static void AesCbc(int mode, uint8_t key[static 32], size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d) {
+static void AesCbc(int mode, uint8_t key[static 32], size_t n,
+                   uint8_t iv[static 16], const uint8_t *s,
+                   uint8_t *d) {
   // Errors are input validations, so we can assert
   mbedtls_aes_context aes;
   if (mode == MBEDTLS_AES_DECRYPT)
@@ -484,31 +500,35 @@ static void AesCbc(int mode, uint8_t key[static 32], size_t n, uint8_t iv[static
   assert(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
 }
 
-#define DecAesCbc(key,n,iv,s,d) AesCbc(MBEDTLS_AES_DECRYPT,key,n,iv,s,d)
-#define EncAesCbc(key,n,iv,s,d) AesCbc(MBEDTLS_AES_ENCRYPT,key,n,iv,s,d)
+#define DecAesCbc(key, n, iv, s, d)                                    \
+  AesCbc(MBEDTLS_AES_DECRYPT, key, n, iv, s, d)
+#define EncAesCbc(key, n, iv, s, d)                                    \
+  AesCbc(MBEDTLS_AES_ENCRYPT, key, n, iv, s, d)
 
-static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE], const omemoKeyPayload in, omemoKey key,
-                    uint8_t iv[static 16]) {
+static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
+                   const omemoKeyPayload in, omemoKey key,
+                   uint8_t iv[static 16]) {
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
   memcpy(tmp, in, OMEMO_INTERNAL_PAYLOAD_SIZE);
-  memset(tmp+OMEMO_INTERNAL_PAYLOAD_SIZE, 0x10, 0x10);
+  memset(tmp + OMEMO_INTERNAL_PAYLOAD_SIZE, 0x10, 0x10);
   EncAesCbc(key, sizeof(tmp), iv, tmp, out);
   return 0;
 }
 
-static int Decrypt(uint8_t *out, const uint8_t *in, size_t n, omemoKey key,
-                    uint8_t iv[static 16]) {
+static int Decrypt(uint8_t *out, const uint8_t *in, size_t n,
+                   omemoKey key, uint8_t iv[static 16]) {
   DecAesCbc(key, n, iv, in, out);
   return 0;
 }
 
 static const uint8_t Zero32[32];
 
-#define DeriveKey(salt, secret, info, out) \
-  (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),     \
-                salt, sizeof(salt), secret, sizeof(secret),       \
-                info, sizeof(info)-1, (uint8_t*)out, sizeof(out)) \
-   ? OMEMO_ECRYPTO : 0)
+#define DeriveKey(salt, secret, info, out)                             \
+  (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt,    \
+                sizeof(salt), secret, sizeof(secret), info,            \
+                sizeof(info) - 1, (uint8_t *)out, sizeof(out))         \
+       ? OMEMO_ECRYPTO                                                 \
+       : 0)
 
 struct __attribute__((__packed__)) DeriveChainKeyOutput {
   omemoKey cipher, mac;
@@ -518,7 +538,8 @@ struct __attribute__((__packed__)) DeriveChainKeyOutput {
 // d may be the same pointer as ck
 //  ck, mk = KDF_CK(ck)
 // NOTE: OMEMO2 COMPLIANT
-static int GetBaseMaterials(omemoKey d, omemoKey mk, const omemoKey ck) {
+static int GetBaseMaterials(omemoKey d, omemoKey mk,
+                            const omemoKey ck) {
   uint8_t data[1] = {1};
   Hmac(ck, data, 1, mk);
   data[0] = 2;
@@ -530,7 +551,10 @@ static int GetBaseMaterials(omemoKey d, omemoKey mk, const omemoKey ck) {
 // header = HEADER(DHs, PN, Ns)
 // Ns += 1
 // return header, ENCRYPT(mk, plaintext, CONCAT(AD, header))
-static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore *store, struct omemoKeyMessage *msg, const omemoKeyPayload payload) {
+static int EncryptKeyImpl(struct omemoSession *session,
+                          const struct omemoStore *store,
+                          struct omemoKeyMessage *msg,
+                          const omemoKeyPayload payload) {
   if (session->fsm != SESSION_INIT && session->fsm != SESSION_READY)
     return OMEMO_ESTATE;
   omemoKey mk;
@@ -546,14 +570,18 @@ static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore 
   // Hmac'd message will always be smaller than 128
   msg->p[msg->n++] = 0xcc; // replaced with actual size
 #endif
-  msg->n += FormatMessageHeader(msg->p+msg->n, session->state.ns, session->state.pn, session->state.dhs.pub);
-  TRY(Encrypt(msg->p+msg->n, payload, kdfout->cipher, kdfout->iv));
+  msg->n +=
+      FormatMessageHeader(msg->p + msg->n, session->state.ns,
+                          session->state.pn, session->state.dhs.pub);
+  TRY(Encrypt(msg->p + msg->n, payload, kdfout->cipher, kdfout->iv));
   msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
 #ifdef OMEMO2
   msg->p[19] = msg->n - 20;
-  TRY(GetMac(msg->p+2, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p+20, msg->n-20));
+  TRY(GetMac(msg->p + 2, store->identity.pub, session->remoteidentity,
+             kdfout->mac, msg->p + 20, msg->n - 20));
 #else
-  TRY(GetMac(msg->p+msg->n, store->identity.pub, session->remoteidentity, kdfout->mac, msg->p, msg->n));
+  TRY(GetMac(msg->p + msg->n, store->identity.pub,
+             session->remoteidentity, kdfout->mac, msg->p, msg->n));
   msg->n += 8;
 #endif
   session->state.ns++;
@@ -561,17 +589,22 @@ static int EncryptKeyImpl(struct omemoSession *session, const struct omemoStore 
     msg->isprekey = true;
     // [message 00...] -> [00... message] -> [header 00... message] ->
     // [header message]
-    memmove(msg->p + OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE, msg->p, msg->n);
-    int headersz =
-        FormatPreKeyMessage(msg->p, session->pendingpk_id, session->pendingspk_id,
-                            store->identity.pub, session->pendingek, msg->n);
-    memmove(msg->p + headersz, msg->p + OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE, msg->n);
+    memmove(msg->p + OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE, msg->p,
+            msg->n);
+    int headersz = FormatPreKeyMessage(
+        msg->p, session->pendingpk_id, session->pendingspk_id,
+        store->identity.pub, session->pendingek, msg->n);
+    memmove(msg->p + headersz,
+            msg->p + OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE, msg->n);
     msg->n += headersz;
   }
   return 0;
 }
 
-int omemoEncryptKey(struct omemoSession *session, const struct omemoStore *store, struct omemoKeyMessage *msg, const omemoKeyPayload payload) {
+OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
+                    const struct omemoStore *store,
+                    struct omemoKeyMessage *msg,
+                    const omemoKeyPayload payload) {
   int r;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
@@ -594,21 +627,23 @@ static int DeriveRootKey(struct omemoState *state, omemoKey ck) {
   return 0;
 }
 
-
 // DH1 = DH(IKA, SPKB)
 // DH2 = DH(EKA, IKB)
 // DH3 = DH(EKA, SPKB)
 // DH4 = DH(EKA, OPKB)
 // SK = KDF(DH1 || DH2 || DH3 || DH4)
-static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika, const omemoKey ska, const omemoKey eka, const omemoKey ikb, const omemoKey spkb, const omemoKey opkb) {
-  uint8_t secret[32*5] = {0}, tmpkey[32];
+static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika,
+                           const omemoKey ska, const omemoKey eka,
+                           const omemoKey ikb, const omemoKey spkb,
+                           const omemoKey opkb) {
+  uint8_t secret[32 * 5] = {0}, tmpkey[32];
   memset(secret, 0xff, 32);
   // When we are bob, we must swap the first two.
-  curve25519(secret+32, isbob ? ska : ika, isbob ? ikb : spkb);
-  curve25519(secret+64, isbob ? ika : ska, isbob ? spkb : ikb);
-  curve25519(secret+96, ska, spkb);
+  curve25519(secret + 32, isbob ? ska : ika, isbob ? ikb : spkb);
+  curve25519(secret + 64, isbob ? ika : ska, isbob ? spkb : ikb);
+  curve25519(secret + 96, ska, spkb);
   // OMEMO mandates that the bundle MUST contain a prekey.
-  curve25519(secret+128, eka, opkb);
+  curve25519(secret + 128, eka, opkb);
   TRY(DeriveKey(Zero32, secret, HkdfInfoKeyExchange, tmpkey));
   memcpy(sk, tmpkey, 32);
   return 0;
@@ -616,13 +651,15 @@ static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika, const om
 
 //  state.DHs = GENERATE_DH()
 //  state.DHr = bob_dh_public_key
-//  state.RK, state.CKs = KDF_RK(SK, DH(state.DHs, state.DHr)) 
+//  state.RK, state.CKs = KDF_RK(SK, DH(state.DHs, state.DHr))
 //  state.CKr = None
 //  state.Ns = 0
 //  state.Nr = 0
 //  state.PN = 0
 //  state.MKSKIPPED = {}
-static int RatchetInitAlice(struct omemoState *state, const omemoKey sk, const omemoKey ekb, const struct omemoKeyPair *eka) {
+static int RatchetInitAlice(struct omemoState *state, const omemoKey sk,
+                            const omemoKey ekb,
+                            const struct omemoKeyPair *eka) {
   memset(state, 0, sizeof(struct omemoState));
   memcpy(&state->dhs, eka, sizeof(struct omemoKeyPair));
   memcpy(state->rk, sk, 32);
@@ -630,12 +667,14 @@ static int RatchetInitAlice(struct omemoState *state, const omemoKey sk, const o
   return DeriveRootKey(state, state->cks);
 }
 
-// We can remove the bundle struct all together by inlining the fields as arguments.
-int omemoInitFromBundle(struct omemoSession *session, const struct omemoStore *store, const struct omemoBundle *bundle) {
+// We can remove the bundle struct all together by inlining the fields
+// as arguments.
+OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
+                        const struct omemoStore *store,
+                        const struct omemoBundle *bundle) {
   omemoSerializedKey serspk;
   omemoSerializeKey(serspk, bundle->spk);
-  if (!VerifySignature(bundle->spks, bundle->ik, serspk,
-                       SerLen)) {
+  if (!VerifySignature(bundle->spks, bundle->ik, serspk, SerLen)) {
     return OMEMO_ESIG;
   }
   struct omemoKeyPair eka;
@@ -651,13 +690,11 @@ int omemoInitFromBundle(struct omemoSession *session, const struct omemoStore *s
   if (!ed25519_try_unpack(edx, edy, bundle->ik))
     return OMEMO_ECORRUPT;
   morph25519_e2m(ik, edy);
-  TRY(GetSharedSecret(sk, false, ikprv, eka.prv,
-                           eka.prv, ik, bundle->spk,
-                           bundle->pk));
+  TRY(GetSharedSecret(sk, false, ikprv, eka.prv, eka.prv, ik,
+                      bundle->spk, bundle->pk));
 #else
-  TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv,
-                           eka.prv, bundle->ik, bundle->spk,
-                           bundle->pk));
+  TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
+                      bundle->ik, bundle->spk, bundle->pk));
 #endif
   TRY(RatchetInitAlice(&session->state, sk, bundle->spk, &eka));
   memcpy(session->pendingek, eka.pub, 32);
@@ -667,15 +704,17 @@ int omemoInitFromBundle(struct omemoSession *session, const struct omemoStore *s
   return 0;
 }
 
-static struct omemoPreKey *FindPreKey(struct omemoStore *store, uint32_t pk_id) {
+static struct omemoPreKey *FindPreKey(struct omemoStore *store,
+                                      uint32_t pk_id) {
   for (int i = 0; i < OMEMO_NUMPREKEYS; i++) {
     if (store->prekeys[i].id == pk_id)
-      return store->prekeys+i;
+      return store->prekeys + i;
   }
   return NULL;
 }
 
-static const struct omemoSignedPreKey *FindSignedPreKey(const struct omemoStore *store, uint32_t spk_id) {
+static const struct omemoSignedPreKey *
+FindSignedPreKey(const struct omemoStore *store, uint32_t spk_id) {
   if (spk_id == 0)
     return NULL;
   if (store->cursignedprekey.id == spk_id)
@@ -685,11 +724,10 @@ static const struct omemoSignedPreKey *FindSignedPreKey(const struct omemoStore 
   return NULL;
 }
 
-int omemoRotateSignedPreKey(struct omemoStore *store) {
+OMEMO_EXPORT int omemoRotateSignedPreKey(struct omemoStore *store) {
   struct omemoSignedPreKey spk;
   int r = GenerateSignedPreKey(
-      &spk,
-      IncrementWrapSkipZero(store->cursignedprekey.id),
+      &spk, IncrementWrapSkipZero(store->cursignedprekey.id),
       &store->identity);
   if (!r) {
     memcpy(&store->prevsignedprekey, &store->cursignedprekey,
@@ -717,7 +755,8 @@ static int DHRatchet(struct omemoState *state, const omemoKey dh) {
   return 0;
 }
 
-static void RatchetInitBob(struct omemoState *state, const omemoKey sk, const struct omemoKeyPair *ekb) {
+static void RatchetInitBob(struct omemoState *state, const omemoKey sk,
+                           const struct omemoKeyPair *ekb) {
   memcpy(&state->dhs, ekb, sizeof(struct omemoKeyPair));
   memcpy(state->rk, sk, 32);
 }
@@ -728,7 +767,8 @@ static inline uint32_t GetAmountSkipped(int64_t nr, int64_t n) {
   return CLAMP0(n - nr);
 }
 
-static int SkipMessageKeys(struct omemoSession *session, uint32_t n, uint64_t fullamount) {
+static int SkipMessageKeys(struct omemoSession *session, uint32_t n,
+                           uint64_t fullamount) {
   struct omemoMessageKey k;
   while (session->state.nr < n) {
     TRY(GetBaseMaterials(session->state.ckr, k.mk, session->state.ckr));
@@ -741,22 +781,22 @@ static int SkipMessageKeys(struct omemoSession *session, uint32_t n, uint64_t fu
 }
 
 static int DecryptKeyImpl(struct omemoSession *session,
-                              const struct omemoStore *store,
-                              omemoKeyPayload decrypted, const uint8_t *msg,
-                              size_t msgn) {
+                          const struct omemoStore *store,
+                          omemoKeyPayload decrypted, const uint8_t *msg,
+                          size_t msgn) {
 #ifdef OMEMO2
   struct ProtobufField fields1[3] = {
-    [1] = {PB_REQUIRED | PB_LEN, 16}, // mac
-    [2] = {PB_REQUIRED | PB_LEN},     // message
+      [1] = {PB_REQUIRED | PB_LEN, 16}, // mac
+      [2] = {PB_REQUIRED | PB_LEN},     // message
   };
   if (ParseProtobuf(msg, msgn, fields1, 3))
     return OMEMO_EPROTOBUF;
 
   struct ProtobufField fields[5] = {
-    [PbMsg_n]          = {PB_REQUIRED | PB_UINT32},
-    [PbMsg_pn]         = {PB_REQUIRED | PB_UINT32},
-    [PbMsg_dh_pub]     = {PB_REQUIRED | PB_LEN, SerLen},
-    [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
+      [PbMsg_n] = {PB_REQUIRED | PB_UINT32},
+      [PbMsg_pn] = {PB_REQUIRED | PB_UINT32},
+      [PbMsg_dh_pub] = {PB_REQUIRED | PB_LEN, SerLen},
+      [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
   };
   if (ParseProtobuf(fields1[2].p, fields1[2].v, fields, 5))
     return OMEMO_EPROTOBUF;
@@ -765,21 +805,22 @@ static int DecryptKeyImpl(struct omemoSession *session,
   if (msgn < 9 || msg[0] != ((3 << 4) | 3))
     return OMEMO_ECORRUPT;
   struct ProtobufField fields[5] = {
-    [PbMsg_dh_pub]     = {PB_REQUIRED | PB_LEN, SerLen},
-    [PbMsg_n]          = {PB_REQUIRED | PB_UINT32},
-    [PbMsg_pn]         = {PB_REQUIRED | PB_UINT32},
-    [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
+      [PbMsg_dh_pub] = {PB_REQUIRED | PB_LEN, SerLen},
+      [PbMsg_n] = {PB_REQUIRED | PB_UINT32},
+      [PbMsg_pn] = {PB_REQUIRED | PB_UINT32},
+      [PbMsg_ciphertext] = {PB_REQUIRED | PB_LEN},
   };
-  if (ParseProtobuf(msg+1, msgn-9, fields, 5))
+  if (ParseProtobuf(msg + 1, msgn - 9, fields, 5))
     return OMEMO_EPROTOBUF;
-  const uint8_t *realmac = msg+msgn-8;
+  const uint8_t *realmac = msg + msgn - 8;
 #endif
 
 #ifdef OMEMO2
   if (fields[PbMsg_ciphertext].v != 64)
     return OMEMO_ECORRUPT;
 #else
-  if (fields[PbMsg_ciphertext].v > 48 || fields[PbMsg_ciphertext].v < 32)
+  if (fields[PbMsg_ciphertext].v > 48 ||
+      fields[PbMsg_ciphertext].v < 32)
     return OMEMO_ECORRUPT;
 #endif
 
@@ -791,13 +832,13 @@ static int DecryptKeyImpl(struct omemoSession *session,
 
   // We first check for maxskip, if that does not pass we should not
   // process the message. If it does pass, we know the total capacity of
-  // the array is large enough because c >= maxskip. Then we check if the
-  // new keys fit in the remaining space. If that is not the case we
-  // return and let the user either remove the old message keys or ignore
-  // the message.
+  // the array is large enough because c >= maxskip. Then we check if
+  // the new keys fit in the remaining space. If that is not the case we
+  // return and let the user either remove the old message keys or
+  // ignore the message.
 
   omemoKey mk;
-  struct omemoMessageKey key = { 0 };
+  struct omemoMessageKey key = {0};
   memcpy(key.dh, headerdh, 32);
   key.nr = headern;
   int r;
@@ -806,10 +847,12 @@ static int DecryptKeyImpl(struct omemoSession *session,
   } else if (r < 0) {
     return r;
   } else {
-    if (!shouldstep && headern < session->state.nr) return OMEMO_EKEYGONE;
-    uint64_t nskips = shouldstep
-      ? GetAmountSkipped(session->state.nr, headerpn) + headern
-      : GetAmountSkipped(session->state.nr, headern);
+    if (!shouldstep && headern < session->state.nr)
+      return OMEMO_EKEYGONE;
+    uint64_t nskips =
+        shouldstep
+            ? GetAmountSkipped(session->state.nr, headerpn) + headern
+            : GetAmountSkipped(session->state.nr, headern);
     if (shouldstep) {
       TRY(SkipMessageKeys(session, headerpn, nskips));
       nskips -= headern;
@@ -823,30 +866,36 @@ static int DecryptKeyImpl(struct omemoSession *session,
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   uint8_t mac[MACSIZE];
 #ifdef OMEMO2
-  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, fields1[2].p, fields1[2].v));
+  TRY(GetMac(mac, session->remoteidentity, store->identity.pub,
+             kdfout->mac, fields1[2].p, fields1[2].v));
 #else
-  TRY(GetMac(mac, session->remoteidentity, store->identity.pub, kdfout->mac, msg, msgn-8));
+  TRY(GetMac(mac, session->remoteidentity, store->identity.pub,
+             kdfout->mac, msg, msgn - 8));
 #endif
   if (memcmp(mac, realmac, MACSIZE))
     return OMEMO_ECORRUPT;
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
-  TRY(Decrypt(tmp, fields[PbMsg_ciphertext].p, fields[PbMsg_ciphertext].v, kdfout->cipher, kdfout->iv));
+  TRY(Decrypt(tmp, fields[PbMsg_ciphertext].p,
+              fields[PbMsg_ciphertext].v, kdfout->cipher, kdfout->iv));
   memcpy(decrypted, tmp, sizeof(omemoKeyPayload));
   session->fsm = SESSION_READY;
   return 0;
 }
 
-static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore *store, omemoKeyPayload payload, bool isprekey, const uint8_t *msg, size_t msgn) {
+static int DecryptGenericKeyImpl(struct omemoSession *session,
+                                 struct omemoStore *store,
+                                 omemoKeyPayload payload, bool isprekey,
+                                 const uint8_t *msg, size_t msgn) {
   struct omemoPreKey *pk = NULL;
   if (isprekey) {
 #ifdef OMEMO2
     // OMEMOKeyExchange
     struct ProtobufField fields[6] = {
-      [PbKeyEx_pk_id]   = {PB_REQUIRED | PB_UINT32},
-      [PbKeyEx_spk_id]  = {PB_REQUIRED | PB_UINT32},
-      [PbKeyEx_ik]      = {PB_REQUIRED | PB_LEN, SerLen},
-      [PbKeyEx_ek]      = {PB_REQUIRED | PB_LEN, SerLen},
-      [PbKeyEx_message] = {PB_REQUIRED | PB_LEN},
+        [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32},
+        [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32},
+        [PbKeyEx_ik] = {PB_REQUIRED | PB_LEN, SerLen},
+        [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen},
+        [PbKeyEx_message] = {PB_REQUIRED | PB_LEN},
     };
     if (ParseProtobuf(msg, msgn, fields, 6))
       return OMEMO_EPROTOBUF;
@@ -855,14 +904,14 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
       return OMEMO_ECORRUPT;
     // PreKeyWhisperMessage
     struct ProtobufField fields[7] = {
-      [5] = {PB_UINT32}, // registrationid
-      [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32}, // prekeyid
-      [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32}, // signedprekeyid
-      [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen}, // basekey/ek
-      [PbKeyEx_ik] = {PB_REQUIRED | PB_LEN, SerLen}, // identitykey/ik
-      [PbKeyEx_message] = {PB_REQUIRED | PB_LEN}, // message
+        [5] = {PB_UINT32},                             // registrationid
+        [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32},   // prekeyid
+        [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32},  // signedprekeyid
+        [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen}, // basekey/ek
+        [PbKeyEx_ik] = {PB_REQUIRED | PB_LEN, SerLen}, // identitykey/ik
+        [PbKeyEx_message] = {PB_REQUIRED | PB_LEN},    // message
     };
-    if (ParseProtobuf(msg+1, msgn-1, fields, 7))
+    if (ParseProtobuf(msg + 1, msgn - 1, fields, 7))
       return OMEMO_EPROTOBUF;
 #endif
     // nr will only ever be 0 with the first prekey message
@@ -870,11 +919,13 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
     if (session->state.nr == 0) {
       // TODO: later remove this prekey
       pk = FindPreKey(store, fields[PbKeyEx_pk_id].v);
-      const struct omemoSignedPreKey *spk = FindSignedPreKey(store, fields[PbKeyEx_spk_id].v);
+      const struct omemoSignedPreKey *spk =
+          FindSignedPreKey(store, fields[PbKeyEx_spk_id].v);
       if (!pk || !spk)
         return OMEMO_ECORRUPT;
       omemoKey sk;
-      memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p), 32);
+      memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p),
+             32);
 #ifdef OMEMO2
       uint8_t ikprv[64];
       // TODO: rename this in c25519.c/h
@@ -883,9 +934,13 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
       if (!ed25519_try_unpack(edx, edy, fields[PbKeyEx_ik].p))
         return OMEMO_ECORRUPT;
       morph25519_e2m(ik, edy);
-      TRY(GetSharedSecret(sk, true, ikprv, spk->kp.prv, pk->kp.prv, ik, fields[PbKeyEx_ek].p, fields[PbKeyEx_ek].p));
+      TRY(GetSharedSecret(sk, true, ikprv, spk->kp.prv, pk->kp.prv, ik,
+                          fields[PbKeyEx_ek].p, fields[PbKeyEx_ek].p));
 #else
-      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv, pk->kp.prv, GetDeser(fields[PbKeyEx_ik].p), GetDeser(fields[PbKeyEx_ek].p), GetDeser(fields[PbKeyEx_ek].p)));
+      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
+                          pk->kp.prv, GetDeser(fields[PbKeyEx_ik].p),
+                          GetDeser(fields[PbKeyEx_ek].p),
+                          GetDeser(fields[PbKeyEx_ek].p)));
 #endif
       RatchetInitBob(&session->state, sk, &spk->kp);
     }
@@ -898,27 +953,30 @@ static int DecryptGenericKeyImpl(struct omemoSession *session, struct omemoStore
   session->fsm = SESSION_READY;
   int r = DecryptKeyImpl(session, store, payload, msg, msgn);
   if (!r && pk) {
-    // TODO: should we remove the key here or let the user do it? We could
-    // do something like `if (pk) session->usedprekey = pk->id` and have a
-    // function which removes & refills that key. When updating the key the
-    // user probably wants to upload the new bundle (or just the new key),
-    // for now that should only be done when this function returns 0 and
-    // isprekey == true. It might be more user friendly to have separate
-    // function for both decrypting prekey and non-prekey where that get
-    // done automatically.
+    // TODO: should we remove the key here or let the user do it? We
+    // could do something like `if (pk) session->usedprekey = pk->id`
+    // and have a function which removes & refills that key. When
+    // updating the key the user probably wants to upload the new bundle
+    // (or just the new key), for now that should only be done when this
+    // function returns 0 and isprekey == true. It might be more user
+    // friendly to have separate function for both decrypting prekey and
+    // non-prekey where that get done automatically.
     memset(pk, 0, sizeof(*pk));
     return omemoRefillPreKeys(store);
   }
   return r;
 }
 
-int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omemoKeyPayload payload, bool isprekey, const uint8_t *msg, size_t msgn) {
+OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
+                    struct omemoStore *store, omemoKeyPayload payload,
+                    bool isprekey, const uint8_t *msg, size_t msgn) {
   if (!session || !store || !store->isinitialized || !msg || !msgn)
     return OMEMO_ESTATE;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
   int r;
-  if ((r = DecryptGenericKeyImpl(session, store, payload, isprekey, msg, msgn))) {
+  if ((r = DecryptGenericKeyImpl(session, store, payload, isprekey, msg,
+                                 msgn))) {
     memcpy(&session->state, &backup, sizeof(struct omemoState));
     memset(payload, 0, OMEMO_INTERNAL_PAYLOAD_SIZE);
   }
@@ -928,67 +986,77 @@ int omemoDecryptKey(struct omemoSession *session, struct omemoStore *store, omem
 /******************** MESSAGE CONTENT ENCRYPTION *********************/
 
 #ifdef OMEMO2
-int omemoDecryptMessage(uint8_t *d, size_t *olen, const uint8_t *payload, size_t pn, const uint8_t *s, size_t n) {
-  if (pn != 48) return OMEMO_ECORRUPT;
-  if (n < 16 || n % 16) return OMEMO_ECORRUPT;
+OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
+                        const uint8_t *payload, size_t pn,
+                        const uint8_t *s, size_t n) {
+  if (pn != 48)
+    return OMEMO_ECORRUPT;
+  if (n < 16 || n % 16)
+    return OMEMO_ECORRUPT;
   uint8_t key[32];
   memcpy(key, payload, 32);
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, key, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
   Hmac(kdfout->mac, s, n, mac);
-  if (memcmp(mac, payload+32, 16))
+  if (memcmp(mac, payload + 32, 16))
     return OMEMO_ESIG; // TODO: have new error code for this?
   DecAesCbc(kdfout->cipher, n, kdfout->iv, s, d);
 
-  uint8_t p = d[n-1];
-  if (p > n) return OMEMO_ECORRUPT;
-  memset(d-p, 0, p);
-  *olen = n-p;
+  uint8_t p = d[n - 1];
+  if (p > n)
+    return OMEMO_ECORRUPT;
+  memset(d - p, 0, p);
+  *olen = n - p;
   return 0;
 }
 #else
-int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn, const uint8_t iv[12], const uint8_t *s, size_t n) {
+OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn,
+                        const uint8_t iv[12], const uint8_t *s,
+                        size_t n) {
   int r = 0;
   if (pn < 32)
     return OMEMO_ECORRUPT;
   mbedtls_gcm_context ctx;
   mbedtls_gcm_init(&ctx);
-  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, payload, 128)))
-    r = mbedtls_gcm_auth_decrypt(&ctx, n, iv, 12, "", 0, payload+16, pn-16, s, d);
+  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, payload,
+                               128)))
+    r = mbedtls_gcm_auth_decrypt(&ctx, n, iv, 12, "", 0, payload + 16,
+                                 pn - 16, s, d);
   mbedtls_gcm_free(&ctx);
   return r ? OMEMO_ECRYPTO : 0;
 }
 #endif
 
 #ifdef OMEMO2
-int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
-                        uint8_t *s, size_t n) {
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload, uint8_t *s,
+                        size_t n) {
   uint8_t key[32];
   TRY(omemoRandom(key, 32));
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, key, HkdfInfoPayload, kdfout));
   // PKCS#7
   size_t extend = omemoGetMessagePadSize(n);
-  memset(s+n, extend, extend);
-  EncAesCbc(kdfout->cipher, n+extend, kdfout->iv, s, d);
+  memset(s + n, extend, extend);
+  EncAesCbc(kdfout->cipher, n + extend, kdfout->iv, s, d);
   uint8_t mac[32];
-  Hmac(kdfout->mac, d, n+extend, mac);
-  memcpy(payload,    key, 32);
-  memcpy(payload+32, mac, 16);
+  Hmac(kdfout->mac, d, n + extend, mac);
+  memcpy(payload, key, 32);
+  memcpy(payload + 32, mac, 16);
   return 0;
 }
 #else
-int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
                         uint8_t iv[12], const uint8_t *s, size_t n) {
   int r = 0;
-  if ((r = omemoRandom(payload, 16))
-   || (r = omemoRandom(iv, 12)))
-   return r;
+  if ((r = omemoRandom(payload, 16)) || (r = omemoRandom(iv, 12)))
+    return r;
   mbedtls_gcm_context ctx;
   mbedtls_gcm_init(&ctx);
-  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, payload, 128)))
-    r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, iv, 12, "", 0, s, d, 16, payload+16);
+  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, payload,
+                               128)))
+    r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, iv, 12,
+                                  "", 0, s, d, 16, payload + 16);
   mbedtls_gcm_free(&ctx);
   return r ? OMEMO_ECRYPTO : 0;
 }
@@ -1003,11 +1071,11 @@ size_t omemoGetSerializedStoreSize(const struct omemoStore *store) {
                GetVarIntSize(store->prevsignedprekey.id) +
                GetVarIntSize(store->pkcounter);
   for (int i = 0; i < OMEMO_NUMPREKEYS; i++)
-    sum += 2 + 1 + GetVarIntSize(store->prekeys[i].id) + 2*34;
+    sum += 2 + 1 + GetVarIntSize(store->prekeys[i].id) + 2 * 34;
   return sum;
 }
 
-void omemoSerializeStore(uint8_t *p, const struct omemoStore *store) {
+OMEMO_EXPORT void omemoSerializeStore(uint8_t *p, const struct omemoStore *store) {
   uint8_t *d = p;
   d = FormatVarInt(d, PB_UINT32, 1, store->isinitialized);
   d = FormatKey(d, 2, store->identity.prv);
@@ -1025,32 +1093,33 @@ void omemoSerializeStore(uint8_t *p, const struct omemoStore *store) {
   d = (memcpy(d, store->prevsignedprekey.sig, 64), d + 64);
   d = FormatVarInt(d, PB_UINT32, 12, store->pkcounter);
   for (int i = 0; i < OMEMO_NUMPREKEYS; i++) {
-    const struct omemoPreKey *pk = store->prekeys+i;
+    const struct omemoPreKey *pk = store->prekeys + i;
     // TODO: only add when prekey.id != 0
-    d = FormatVarInt(d, PB_LEN, 13, 1+GetVarIntSize(pk->id)+2*34);
+    d = FormatVarInt(d, PB_LEN, 13, 1 + GetVarIntSize(pk->id) + 2 * 34);
     d = FormatVarInt(d, PB_UINT32, 1, pk->id);
     d = FormatKey(d, 2, pk->kp.prv);
     d = FormatKey(d, 3, pk->kp.pub);
   }
-  assert(d-p == omemoGetSerializedStoreSize(store));
+  assert(d - p == omemoGetSerializedStoreSize(store));
 }
 
-int omemoDeserializeStore(const char *p, size_t n, struct omemoStore *store) {
+OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
+                          struct omemoStore *store) {
   assert(p && store);
   struct ProtobufField fields[] = {
-    [1] = {PB_REQUIRED | PB_UINT32},
-    [2] = {PB_REQUIRED | PB_LEN, 32},
-    [3] = {PB_REQUIRED | PB_LEN, 32},
-    [4] = {PB_REQUIRED | PB_UINT32},
-    [5] = {PB_REQUIRED | PB_LEN, 32},
-    [6] = {PB_REQUIRED | PB_LEN, 32},
-    [7] = {PB_REQUIRED | PB_LEN, 64},
-    [8] = {PB_REQUIRED | PB_UINT32},
-    [9] = {PB_REQUIRED | PB_LEN, 32},
-    [10] = {PB_REQUIRED | PB_LEN, 32},
-    [11] = {PB_REQUIRED | PB_LEN, 64},
-    [12] = {PB_REQUIRED | PB_UINT32},
-    [13] = {/*PB_REQUIRED |*/ PB_LEN},
+      [1] = {PB_REQUIRED | PB_UINT32},
+      [2] = {PB_REQUIRED | PB_LEN, 32},
+      [3] = {PB_REQUIRED | PB_LEN, 32},
+      [4] = {PB_REQUIRED | PB_UINT32},
+      [5] = {PB_REQUIRED | PB_LEN, 32},
+      [6] = {PB_REQUIRED | PB_LEN, 32},
+      [7] = {PB_REQUIRED | PB_LEN, 64},
+      [8] = {PB_REQUIRED | PB_UINT32},
+      [9] = {PB_REQUIRED | PB_LEN, 32},
+      [10] = {PB_REQUIRED | PB_LEN, 32},
+      [11] = {PB_REQUIRED | PB_LEN, 64},
+      [12] = {PB_REQUIRED | PB_UINT32},
+      [13] = {/*PB_REQUIRED |*/ PB_LEN},
   };
   if (ParseProtobuf(p, n, fields, 14))
     return OMEMO_EPROTOBUF;
@@ -1068,11 +1137,13 @@ int omemoDeserializeStore(const char *p, size_t n, struct omemoStore *store) {
   store->pkcounter = fields[12].v;
   const char *e = p + n;
   int i = 0;
-  while (i < OMEMO_NUMPREKEYS && !ParseRepeatingField(p, e-p, &fields[13], 13) && fields[13].p) {
+  while (i < OMEMO_NUMPREKEYS &&
+         !ParseRepeatingField(p, e - p, &fields[13], 13) &&
+         fields[13].p) {
     struct ProtobufField innerfields[] = {
-      [1] = {PB_REQUIRED | PB_UINT32},
-      [2] = {PB_REQUIRED | PB_LEN, 32},
-      [3] = {PB_REQUIRED | PB_LEN, 32},
+        [1] = {PB_REQUIRED | PB_UINT32},
+        [2] = {PB_REQUIRED | PB_LEN, 32},
+        [3] = {PB_REQUIRED | PB_LEN, 32},
     };
     if (ParseProtobuf(fields[13].p, fields[13].v, innerfields, 4))
       return OMEMO_EPROTOBUF;
@@ -1086,8 +1157,9 @@ int omemoDeserializeStore(const char *p, size_t n, struct omemoStore *store) {
   return 0;
 }
 
-size_t omemoGetSerializedSessionSize(const struct omemoSession *session) {
-  return  34 * 8 // Key
+size_t
+omemoGetSerializedSessionSize(const struct omemoSession *session) {
+  return 34 * 8 // Key
          + 1 * 6 + GetVarIntSize(session->state.ns) +
          GetVarIntSize(session->state.nr) +
          GetVarIntSize(session->state.pn) +
@@ -1096,7 +1168,8 @@ size_t omemoGetSerializedSessionSize(const struct omemoSession *session) {
          GetVarIntSize(session->fsm);
 }
 
-void omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
+OMEMO_EXPORT void omemoSerializeSession(uint8_t *p,
+                           const struct omemoSession *session) {
   uint8_t *d = p;
   d = FormatKey(d, 1, session->remoteidentity);
   d = FormatKey(d, 2, session->state.dhs.prv);
@@ -1112,26 +1185,27 @@ void omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   d = FormatVarInt(d, PB_UINT32, 12, session->pendingpk_id);
   d = FormatVarInt(d, PB_UINT32, 13, session->pendingspk_id);
   d = FormatVarInt(d, PB_UINT32, 14, session->fsm);
-  assert(d-p == omemoGetSerializedSessionSize(session));
+  assert(d - p == omemoGetSerializedSessionSize(session));
 }
 
-int omemoDeserializeSession(const char *p, size_t n, struct omemoSession *session) {
+OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
+                            struct omemoSession *session) {
   assert(p && n && session);
   struct ProtobufField fields[] = {
-    [1] = {PB_REQUIRED | PB_LEN, 32},
-    [2] = {PB_REQUIRED | PB_LEN, 32},
-    [3] = {PB_REQUIRED | PB_LEN, 32},
-    [4] = {PB_REQUIRED | PB_LEN, 32},
-    [5] = {PB_REQUIRED | PB_LEN, 32},
-    [6] = {PB_REQUIRED | PB_LEN, 32},
-    [7] = {PB_REQUIRED | PB_LEN, 32},
-    [8] = {PB_REQUIRED | PB_UINT32},
-    [9] = {PB_REQUIRED | PB_UINT32},
-    [10] = {PB_REQUIRED | PB_UINT32},
-    [11] = {PB_REQUIRED | PB_LEN, 32},
-    [12] = {PB_REQUIRED | PB_UINT32},
-    [13] = {PB_REQUIRED | PB_UINT32},
-    [14] = {PB_REQUIRED | PB_UINT32},
+      [1] = {PB_REQUIRED | PB_LEN, 32},
+      [2] = {PB_REQUIRED | PB_LEN, 32},
+      [3] = {PB_REQUIRED | PB_LEN, 32},
+      [4] = {PB_REQUIRED | PB_LEN, 32},
+      [5] = {PB_REQUIRED | PB_LEN, 32},
+      [6] = {PB_REQUIRED | PB_LEN, 32},
+      [7] = {PB_REQUIRED | PB_LEN, 32},
+      [8] = {PB_REQUIRED | PB_UINT32},
+      [9] = {PB_REQUIRED | PB_UINT32},
+      [10] = {PB_REQUIRED | PB_UINT32},
+      [11] = {PB_REQUIRED | PB_LEN, 32},
+      [12] = {PB_REQUIRED | PB_UINT32},
+      [13] = {PB_REQUIRED | PB_UINT32},
+      [14] = {PB_REQUIRED | PB_UINT32},
   };
   if (ParseProtobuf(p, n, fields, 15))
     return OMEMO_EPROTOBUF;
