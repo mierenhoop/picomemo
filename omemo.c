@@ -330,14 +330,34 @@ static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
 }
 #endif
 
+// For OMEMO 0.3, we use the sign_modified as is required.
+// For OMEMO >0.3 (OMEMO2 here), the spec describes two options.
+// 1: XEdDSA w/ Curve25519 ik
+// 2: Any other EdDSA-compatible signature scheme w/ Ed25519 ik
+//
+// We mix the two: Ed25519 ik with XEdDSA-inspired signatures.
+//
+// The XEdDSA implementation in libsignal-protocol-c reuses
+// sign_modified with code for calculate_key_pair beforehand to convert
+// the Curve25519 pub to Ed25519 while handling the sign bit. As we use
+// an Ed25519 key internally AND distribute it, thus also not removing
+// the sign bit for any party, we can skip the whole generate_key part.
+// Essentially the only deviations from regular EdDSA is the
+// addition of a randomized nonce to msg and the usage of the hash1(X)
+// variation on SHA-512.
 static int CalculateCurveSignature(omemoCurveSignature sig,
                                    const omemoKey prv,
                                    const uint8_t *msg, size_t msgn) {
 #ifdef OMEMO2
-  omemoKey pub;
+  assert(msgn <= 32);
+  omemoKey ed;
+  uint8_t msgbuf[32 + 64], exp[64];
+  memcpy(msgbuf, msg, msgn);
+  TRY(omemoRandom(msgbuf + msgn, 64));
   // TODO: can we reuse idkp->pub
-  edsign_sec_to_pub(pub, prv);
-  edsign_sign(sig, pub, prv, msg, msgn);
+  edsign_sec_to_pub(ed, prv);
+  expand_key(exp, prv);
+  edsign_sign_modified(sig, ed, exp, msgbuf, msgn);
   return 0;
 #else
   assert(msgn <= 33);
@@ -360,8 +380,6 @@ static bool VerifySignature(const omemoCurveSignature sig,
                             const omemoKey pub, const uint8_t *msg,
                             size_t msgn) {
 #ifdef OMEMO2
-  // TODO: pub is bundle->ik in ed25519 form, we might still have to
-  // force a sign bit
   return !!edsign_verify(sig, pub, msg, msgn);
 #else
   omemoKey ed;
