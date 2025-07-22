@@ -139,31 +139,34 @@ static void TestCurve25519() {
 }
 
 static void TestSignature() {
-  omemoKey prv, pub;
+  struct omemoKeyPair ik;
   omemoCurveSignature sig, expsig;
 #ifndef OMEMO2
 #define MSGLEN 12
   uint8_t msg[MSGLEN];
   CopyHex(msg, "617364666173646661736466");
-  CopyHex(prv, "48a8892cc4e49124b7b57d94fa15becfce071830d6449004685e387"
+  CopyHex(ik.prv, "48a8892cc4e49124b7b57d94fa15becfce071830d6449004685e387"
                "c62409973");
-  CopyHex(pub, "55f1bfede27b6a03e0dd389478ffb01462e5c52dbbac32cf870f00a"
+  CopyHex(ik.pub, "55f1bfede27b6a03e0dd389478ffb01462e5c52dbbac32cf870f00a"
                "f1ed9af3a");
   CopyHex(expsig, "2bc06c745acb8bae10fbc607ee306084d0c28e2b3bb819133392"
                   "473431291fd0dfa9c7f11479996cf520730d2901267387e08d85"
                   "bbf2af941590e3035a545285");
 #else
 #define MSGLEN 2
-  uint8_t msg[MSGLEN];
-  CopyHex(prv, "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7");
-  CopyHex(pub, "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025");
+  uint8_t msg[MSGLEN], exp[64];
+  CopyHex(ik.prv, "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7");
+  // Normalizing seed->prv, TODO: put normalized hex string in instead
+  expand_key(exp, ik.prv);
+  memcpy(ik.prv, exp, 32);
+  CopyHex(ik.pub, "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025");
   CopyHex(msg, "af82");
   CopyHex(expsig, "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a");
 #endif
-  assert(VerifySignature(expsig, pub, msg, MSGLEN));
+  assert(VerifySignature(expsig, ik.pub, msg, MSGLEN));
 
-  assert(!CalculateCurveSignature(sig, prv, msg, MSGLEN));
-  assert(VerifySignature(sig, pub, msg, MSGLEN));
+  assert(!CalculateCurveSignature(sig, &ik, msg, MSGLEN));
+  assert(VerifySignature(sig, ik.pub, msg, MSGLEN));
 }
 
 // This would in reality parse the bundle's XML instead of their store.

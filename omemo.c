@@ -346,18 +346,14 @@ static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
 // addition of a randomized nonce to msg and the usage of the hash1(X)
 // variation on SHA-512.
 static int CalculateCurveSignature(omemoCurveSignature sig,
-                                   const omemoKey prv,
+                                   const struct omemoKeyPair *ik,
                                    const uint8_t *msg, size_t msgn) {
 #ifdef OMEMO2
   assert(msgn <= 32);
-  omemoKey ed;
-  uint8_t msgbuf[32 + 64], exp[64];
+  uint8_t msgbuf[32 + 64];
   memcpy(msgbuf, msg, msgn);
   TRY(omemoRandom(msgbuf + msgn, 64));
-  // TODO: can we reuse idkp->pub
-  edsign_sec_to_pub(ed, prv);
-  expand_key(exp, prv);
-  edsign_sign_modified(sig, ed, exp, msgbuf, msgn);
+  edsign_sign_modified(sig, ik->pub, ik->prv, msgbuf, msgn);
   return 0;
 #else
   assert(msgn <= 33);
@@ -366,9 +362,9 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
   int sign = 0;
   memcpy(msgbuf, msg, msgn);
   TRY(omemoRandom(msgbuf + msgn, 64));
-  ConvertCurvePrvToEdPub(ed, prv);
+  ConvertCurvePrvToEdPub(ed, ik->prv);
   sign = ed[31] & 0x80;
-  edsign_sign_modified(sig, ed, prv, msgbuf, msgn);
+  edsign_sign_modified(sig, ed, ik->prv, msgbuf, msgn);
   sig[63] &= 0x7f;
   sig[63] |= sign;
   return 0;
@@ -407,6 +403,9 @@ static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
   TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
   ed25519_prepare(kp->prv);
   edsign_sec_to_pub(kp->pub, kp->prv);
+  uint8_t exp[64];
+  expand_key(exp, kp->prv);
+  memcpy(kp->prv, exp, 32);
   return 0;
 }
 #endif
@@ -423,7 +422,7 @@ static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
   spk->id = id;
   TRY(GenerateKeyPair(&spk->kp));
   omemoSerializeKey(ser, spk->kp.pub);
-  return CalculateCurveSignature(spk->sig, idkp->prv, ser, SerLen);
+  return CalculateCurveSignature(spk->sig, idkp, ser, SerLen);
 }
 
 /****************************** STORE ********************************/
@@ -701,15 +700,12 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   memcpy(session->remoteidentity, bundle->ik, 32);
   omemoKey sk;
 #ifdef OMEMO2
-  uint8_t ikprv[64];
-  // TODO: rename this in c25519.c/h
-  expand_key(ikprv, store->identity.prv);
   omemoKey ik, edx, edy;
   if (!ed25519_try_unpack(edx, edy, bundle->ik))
     return OMEMO_ECORRUPT;
   morph25519_e2m(ik, edy);
-  TRY(GetSharedSecret(sk, false, ikprv, eka.prv, eka.prv, ik,
-                      bundle->spk, bundle->pk));
+  TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
+                      ik, bundle->spk, bundle->pk));
 #else
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       bundle->ik, bundle->spk, bundle->pk));
@@ -945,15 +941,13 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
       memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p),
              32);
 #ifdef OMEMO2
-      uint8_t ikprv[64];
-      // TODO: rename this in c25519.c/h
-      expand_key(ikprv, store->identity.prv);
       omemoKey ik, edx, edy;
       if (!ed25519_try_unpack(edx, edy, fields[PbKeyEx_ik].p))
         return OMEMO_ECORRUPT;
       morph25519_e2m(ik, edy);
-      TRY(GetSharedSecret(sk, true, ikprv, spk->kp.prv, pk->kp.prv, ik,
-                          fields[PbKeyEx_ek].p, fields[PbKeyEx_ek].p));
+      TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
+                          pk->kp.prv, ik, fields[PbKeyEx_ek].p,
+                          fields[PbKeyEx_ek].p));
 #else
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
                           pk->kp.prv, GetDeser(fields[PbKeyEx_ik].p),
