@@ -15,6 +15,7 @@
  */
 
 #include "../omemo.c"
+//#include "../hacl.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -165,8 +166,34 @@ static void TestSignature() {
 #endif
   assert(VerifySignature(expsig, ik.pub, msg, MSGLEN));
 
-  assert(!CalculateCurveSignature(sig, &ik, msg, MSGLEN));
+  uint8_t rnd[64];
+  assert(!omemoRandom(rnd, 64));
+  assert(!CalculateCurveSignature(sig, &ik, rnd, msg, MSGLEN));
   assert(VerifySignature(sig, ik.pub, msg, MSGLEN));
+
+#ifndef OMEMO2
+  omemoKey ed;
+  uint8_t msg2[33];
+  memset(ik.prv, 0x22, 32);
+  c25519_prepare(ik.prv);
+  memset(msg2, 0xaa, 33);
+  memset(rnd, 0x55, 64);
+  CalculateCurveSignature(sig, &ik, rnd, msg2, 33);
+  CopyHex(expsig, "f233b4ff4a5ba228980348fc07a49bdb26d4c88499015b29c604995cbe8c98351934e773569453d17ee000011e3662783d695f830b6a4bb49fb774c9b0599604");
+  assert(!memcmp(expsig, sig, 64));
+#endif
+}
+
+void TestKeyConversions() {
+#ifndef OMEMO2
+  uint8_t prv[32], pub[32], pub2[32], pub3[32];
+  memset(prv, 0xcc, 32);
+  c25519_prepare(prv);
+  ConvertCurvePrvToEdPub(pub2, prv);
+  // TODO
+  //Hacl_Ed25519_pub_from_Curve25519_priv(pub3, prv);
+  //assert(!memcmp(pub2, pub3, 32))
+#endif
 }
 
 // This would in reality parse the bundle's XML instead of their store.
@@ -536,6 +563,7 @@ int main() {
   RunTest(TestProtobufPrekey);
   RunTest(TestCurve25519);
   RunTest(TestSignature);
+  RunTest(TestKeyConversions);
   RunTest(TestEncryption);
   RunTest(TestHkdf);
   RunTest(TestRatchet);

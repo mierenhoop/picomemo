@@ -347,28 +347,23 @@ static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
 // variation on SHA-512.
 static int CalculateCurveSignature(omemoCurveSignature sig,
                                    const struct omemoKeyPair *ik,
+                                   const uint8_t rnd[static 64],
                                    const uint8_t *msg, size_t msgn) {
+  assert(msgn <= SerLen);
+  uint8_t msgbuf[SerLen+64];
+  memcpy(msgbuf, msg, msgn);
+  memcpy(msgbuf + msgn, rnd, 64);
 #ifdef OMEMO2
-  assert(msgn <= 32);
-  uint8_t msgbuf[32 + 64];
-  memcpy(msgbuf, msg, msgn);
-  TRY(omemoRandom(msgbuf + msgn, 64));
   edsign_sign_modified(sig, ik->pub, ik->prv, msgbuf, msgn);
-  return 0;
 #else
-  assert(msgn <= 33);
   omemoKey ed;
-  uint8_t msgbuf[33 + 64];
-  int sign = 0;
-  memcpy(msgbuf, msg, msgn);
-  TRY(omemoRandom(msgbuf + msgn, 64));
   ConvertCurvePrvToEdPub(ed, ik->prv);
-  sign = ed[31] & 0x80;
+  int sign = ed[31] & 0x80;
   edsign_sign_modified(sig, ed, ik->prv, msgbuf, msgn);
   sig[63] &= 0x7f;
   sig[63] |= sign;
-  return 0;
 #endif
+  return 0;
 }
 
 //  Sig(PK, M)
@@ -422,7 +417,9 @@ static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
   spk->id = id;
   TRY(GenerateKeyPair(&spk->kp));
   omemoSerializeKey(ser, spk->kp.pub);
-  return CalculateCurveSignature(spk->sig, idkp, ser, SerLen);
+  uint8_t rnd[64];
+  TRY(omemoRandom(rnd, 64));
+  return CalculateCurveSignature(spk->sig, idkp, rnd, ser, SerLen);
 }
 
 /****************************** STORE ********************************/
