@@ -700,9 +700,9 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   memcpy(session->remoteidentity, bundle->ik, 32);
   omemoKey sk;
 #ifdef OMEMO2
-  omemoKey ik, edx, edy;
-  if (!ed25519_try_unpack(edx, edy, bundle->ik))
-    return OMEMO_ECORRUPT;
+  omemoKey ik, edy;
+  memcpy(edy, bundle->ik, 32);
+  edy[31] &= 0x7f;
   morph25519_e2m(ik, edy);
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       ik, bundle->spk, bundle->pk));
@@ -941,9 +941,9 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
       memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p),
              32);
 #ifdef OMEMO2
-      omemoKey ik, edx, edy;
-      if (!ed25519_try_unpack(edx, edy, fields[PbKeyEx_ik].p))
-        return OMEMO_ECORRUPT;
+      omemoKey ik, edy;
+      memcpy(edy, fields[PbKeyEx_ik].p, 32);
+      edy[31] &= 0x7f;
       morph25519_e2m(ik, edy);
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
                           pk->kp.prv, ik, fields[PbKeyEx_ek].p,
