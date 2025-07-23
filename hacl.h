@@ -1,6 +1,16 @@
 #ifndef HACL_H_
 #define HACL_H_
 
+#include <stdint.h>
+#include <stdbool.h>
+
+void Hacl_Curve25519_51_secret_to_public(uint8_t *pub, uint8_t *priv);
+
+bool Hacl_Curve25519_51_ecdh(uint8_t *out, uint8_t *priv, uint8_t *pub);
+
+bool
+Hacl_Ed25519_verify(uint8_t *public_key, uint32_t msg_len, uint8_t *msg, uint8_t *signature);
+
 // OMEMO Additions
 
 void Hacl_Ed25519_sign_modified(

@@ -4,7 +4,7 @@
 #include <sys/random.h>
 #include "Hacl_Curve25519_51.h"
 #include "Hacl_Ed25519.h"
-#include "hacl.h"
+#include "../hacl.h"
 #include "internal/Hacl_Ed25519.h"
 #include "internal/Hacl_Bignum25519_51.h"
 #include "../c25519.h"
