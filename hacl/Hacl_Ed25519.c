@@ -1839,6 +1839,8 @@ Hacl_Ed25519_verify(uint8_t *public_key, uint32_t msg_len, uint8_t *msg, uint8_t
   return false;
 }
 
+// OMEMO Additions
+
 void Hacl_Ed25519_sign_modified(
   uint8_t *signature,
   uint8_t *public_key,
@@ -1866,18 +1868,19 @@ void Hacl_Ed25519_sign_modified(
   store_56(ss, aq);
 }
 
-void Hacl_Ed25519_pub_from_Curve25519_sec(
+void Hacl_Ed25519_pub_from_Curve25519_priv(
     uint8_t *pub,
     uint8_t *sec) {
   point_mul_g_compress(pub, sec);
 }
 
-void Hacl_Ed25519_secret_expand_low(
-    uint8_t *expanded,
-    uint8_t *sec) {
-  uint8_t full[64];
-  secret_expand(full, sec);
-  memcpy(expanded, full, 32);
+void Hacl_Ed25519_seed_to_pub_priv(uint8_t *public_key, uint8_t *private_key, uint8_t *seed)
+{
+  uint8_t expanded_secret[64U] = { 0U };
+  secret_expand(expanded_secret, seed);
+  uint8_t *a = expanded_secret;
+  point_mul_g_compress(public_key, a);
+  memcpy(private_key, a, 32);
 }
 
 bool Hacl_Ed25519_pub_to_Curve25519_pub(
@@ -1886,13 +1889,22 @@ bool Hacl_Ed25519_pub_to_Curve25519_pub(
   uint64_t o[20], um[5], yplus[5], yminus[5], one[5] = {1,0,0,0,0};
   if (!Hacl_Impl_Ed25519_PointDecompress_point_decompress(o, e))
     return false;
-  Hacl_Impl_Curve25519_Field51_fsub(yplus, one, o+5);
+  fdifference(yplus, one, o+5);
   Hacl_Bignum25519_inverse(yminus, yplus);
-  Hacl_Impl_Curve25519_Field51_fadd(yplus, one, o+5);
-  FStar_UInt128_uint128 tmp[10];
-  for (int i = 0; i < 10; i++)
-    tmp[i] = FStar_UInt128_uint64_to_uint128(0);
-  Hacl_Impl_Curve25519_Field51_fmul(um, yplus, yminus, tmp);
+  fsum(yplus, one, o+5);
+  fmul0(um, yplus, yminus);
   Hacl_Bignum25519_store_51(m, um);
   return true;
+}
+
+void Hacl_Curve25519_pub_to_Ed25519_pub(
+    uint8_t *e,
+    uint8_t *m) {
+  uint64_t ey[5], mx[5], n[5], d[5], one[5] = {1,0,0,0,0};
+  Hacl_Bignum25519_load_51(mx, m);
+  fsum(n, mx, one);
+  Hacl_Bignum25519_inverse(d, n);
+  fdifference(n, mx, one);
+  fmul0(ey, n, d);
+  Hacl_Bignum25519_store_51(e, ey);
 }

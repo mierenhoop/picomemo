@@ -4,44 +4,10 @@
 #include <sys/random.h>
 #include "Hacl_Curve25519_51.h"
 #include "Hacl_Ed25519.h"
+#include "hacl.h"
 #include "internal/Hacl_Ed25519.h"
 #include "internal/Hacl_Bignum25519_51.h"
 #include "../c25519.h"
-
-bool TryUnpackY(uint8_t y[32], uint8_t pub[32]) {
-  // TODO: we only need to run the x part of decompress
-  uint64_t o[20];
-  if (!Hacl_Impl_Ed25519_PointDecompress_point_decompress(o, pub))
-    return false;
-  Hacl_Bignum25519_store_51(y, o+5);
-  return true;
-}
-
-void E2M(uint8_t m8[32], uint8_t y8[32]) {
-  uint64_t m[5], y[5], yplus[5], yminus[5], one[5] = {1,0,0,0,0};
-  Hacl_Bignum25519_load_51(y, y8);
-  Hacl_Impl_Curve25519_Field51_fsub(yplus, one, y);
-  Hacl_Bignum25519_inverse(yminus, yplus);
-  Hacl_Impl_Curve25519_Field51_fadd(yplus, one, y);
-  FStar_UInt128_uint128 tmp[10];
-  for (int i = 0; i < 10; i++)
-    tmp[i] = FStar_UInt128_uint64_to_uint128(0);
-  Hacl_Impl_Curve25519_Field51_fmul(m, yplus, yminus, tmp);
-  Hacl_Bignum25519_store_51(m8, m);
-}
-
-void Mx2Ey(uint8_t ey8[32], uint8_t mx8[32]) {
-  uint64_t ey[5], mx[5], n[5], d[5], one[5] = {1,0,0,0,0};
-  Hacl_Bignum25519_load_51(mx, mx8);
-  Hacl_Impl_Curve25519_Field51_fadd(n, mx, one);
-  Hacl_Bignum25519_inverse(d, n);
-  Hacl_Impl_Curve25519_Field51_fsub(n, mx, one);
-  FStar_UInt128_uint128 tmp[10];
-  for (int i = 0; i < 10; i++)
-    tmp[i] = FStar_UInt128_uint64_to_uint128(0);
-  Hacl_Impl_Curve25519_Field51_fmul(ey, n, d, tmp);
-  Hacl_Bignum25519_store_51(ey8, ey);
-}
 
 static void ConvertCurvePrvToEdPub(uint8_t ed[32], const uint8_t prv[32]) {
   struct ed25519_pt p;
@@ -89,7 +55,7 @@ int main() {
     //TryUnpackY(edy, pub);
     //Mx2Ey(edy, pub);
     //E2M(pub, edy);
-    Hacl_Ed25519_pub_from_Curve25519_sec(pub, prv);
+    Hacl_Ed25519_pub_from_Curve25519_priv(pub, prv);
     //;
 #else
     //edsign_sec_to_pub(pub, prv);
