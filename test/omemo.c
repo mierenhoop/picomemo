@@ -15,7 +15,7 @@
  */
 
 #include "../omemo.c"
-//#include "../hacl.h"
+#include "../hacl.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -125,6 +125,8 @@ static void TestKeyPair(struct omemoKeyPair *kp, const char *rnd, const char *pr
   memset(kp->pub, 0, 32);
   c25519_smult(kp->pub, c25519_base_x, kprv);
   assert(!memcmp(kpub, kp->pub, 32));
+  Hacl_Curve25519_51_secret_to_public(kp->pub, kprv);
+  assert(!memcmp(kpub, kp->pub, 32));
 }
 
 static void TestCurve25519() {
@@ -137,6 +139,19 @@ static void TestCurve25519() {
   assert(!memcmp(expshared, shared, 32));
   curve25519(shared, kpb.prv, kpa.pub);
   assert(!memcmp(expshared, shared, 32));
+  // TODO: why does this fail?
+  //Hacl_Curve25519_51_scalarmult(shared, kpa.prv, kpa.pub);
+  assert(!memcmp(expshared, shared, 32));
+}
+
+static void TestRotate() {
+  struct omemoStore store;
+  assert(!omemoDeserializeStore(store_inc, store_inc_len, &store));
+  struct omemoSignedPreKey spk;
+  memcpy(&spk, &store.cursignedprekey, sizeof(spk));
+  assert(!omemoRotateSignedPreKey(&store));
+  assert(!memcmp(&spk, &store.prevsignedprekey, sizeof(spk)));
+  assert(memcmp(&spk, &store.cursignedprekey, sizeof(spk)));
 }
 
 static void TestSignature() {
@@ -172,7 +187,6 @@ static void TestSignature() {
   assert(VerifySignature(sig, ik.pub, msg, MSGLEN));
 
 #ifndef OMEMO2
-  omemoKey ed;
   uint8_t msg2[33];
   memset(ik.prv, 0x22, 32);
   c25519_prepare(ik.prv);
@@ -184,16 +198,60 @@ static void TestSignature() {
 #endif
 }
 
-void TestKeyConversions() {
+void TestCurvePrvToEdPub() {
 #ifndef OMEMO2
-  uint8_t prv[32], pub[32], pub2[32], pub3[32];
+  omemoKey prv, pub2, pub3;
   memset(prv, 0xcc, 32);
   c25519_prepare(prv);
   ConvertCurvePrvToEdPub(pub2, prv);
-  // TODO
-  //Hacl_Ed25519_pub_from_Curve25519_priv(pub3, prv);
-  //assert(!memcmp(pub2, pub3, 32))
+  Hacl_Ed25519_pub_from_Curve25519_priv(pub3, prv);
+  assert(!memcmp(pub2, pub3, 32));
 #endif
+}
+
+void TestSignModified() {
+  omemoCurveSignature sig, sig2;
+  uint8_t msgbuf[32+64];
+  omemoKey seed, prv, pub;
+  memset(seed, 0xcc, 32);
+  memset(msgbuf, 0x55, 32);
+  memset(msgbuf+32, 0xaa, 64);
+  Hacl_Ed25519_seed_to_pub_priv(pub, prv, seed);
+  edsign_sign_modified(sig, pub, prv, msgbuf, 32);
+  Hacl_Ed25519_sign_modified(sig2, pub, prv, msgbuf, 32);
+  assert(!memcmp(sig, sig2, 64));
+}
+
+void TestEdPubToCurvePub() {
+  omemoKey seed, prv, pub1, pub2, pub3, pub4;
+  memset(seed, 0xee, 32);
+  uint8_t exp[64];
+  edsign_sec_to_pub(pub1, seed);
+  expand_key(exp, seed);
+  Hacl_Ed25519_seed_to_pub_priv(pub2, prv, seed);
+  assert(!memcmp(exp, prv, 32));
+  assert(!memcmp(pub1, pub2, 32));
+  pub1[31] &= 0x7f;
+  pub2[31] &= 0x7f;
+  morph25519_e2m(pub3, pub1);
+  Hacl_Ed25519_pub_to_Curve25519_pub(pub4, pub2);
+  assert(!memcmp(pub3, pub4, 32));
+}
+
+void TestCurvePubToEdPub() {
+  omemoKey prv, pub, ed1, ed2;
+  assert(!omemoRandom(prv,32));
+  c25519_prepare(prv);
+  curve25519(pub, prv, c25519_base_x);
+  Hacl_Curve25519_pub_to_Ed25519_pub(ed1, pub);
+  morph25519_mx2ey(ed2, pub);
+  assert(!memcmp(ed1, ed2, 32));
+}
+
+void TestKeyConversions() {
+  TestCurvePrvToEdPub();
+  TestEdPubToCurvePub();
+  TestCurvePubToEdPub();
 }
 
 // This would in reality parse the bundle's XML instead of their store.
@@ -562,7 +620,9 @@ int main() {
   RunTest(TestFormatProtobuf);
   RunTest(TestProtobufPrekey);
   RunTest(TestCurve25519);
+  RunTest(TestRotate);
   RunTest(TestSignature);
+  RunTest(TestSignModified);
   RunTest(TestKeyConversions);
   RunTest(TestEncryption);
   RunTest(TestHkdf);

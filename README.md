@@ -59,7 +59,7 @@ OMEMO. They are compiled as `lomemo.so` and `lomemo2.so`.
 
 - MbedTLS 3.0+
 
-- C99 compiler
+- C compiler (gcc)
 
 - docker-compose (for testing)
 

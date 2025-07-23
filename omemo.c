@@ -396,7 +396,6 @@ static int GenerateKeyPair(struct omemoKeyPair *kp) {
 static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
   memset(kp, 0, sizeof(*kp));
   TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
-  ed25519_prepare(kp->prv);
   edsign_sec_to_pub(kp->pub, kp->prv);
   uint8_t exp[64];
   expand_key(exp, kp->prv);

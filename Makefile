@@ -1,4 +1,4 @@
-CFLAGS=-g -std=c99 -Wall -Wno-pointer-sign -I. -MMD -MP
+CFLAGS=-g -Wall -Wno-pointer-sign -I. -MMD -MP
 
 OMEMOSRCS=c25519.c omemo.c
 XMPPSRCS=example/xmpp.c example/yxml.c
@@ -29,11 +29,11 @@ o:
 o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
 	$(CC) -o $@ test/xmpp.c example/yxml.c  $(CFLAGS) -Iexample -lmbedcrypto -lmbedtls -lmbedx509
 
-o/test-omemo: test/omemo.c c25519.c omemo.c o/msg.bin
-	$(CC) -o $@ test/omemo.c c25519.c $(CFLAGS) -DOMEMO_EXPORT=static -lmbedcrypto
+o/test-omemo:   test/omemo.c c25519.c hacl.c omemo.c o/msg.bin
+	$(CC) -o $@ test/omemo.c c25519.c hacl.c $(CFLAGS) -DOMEMO_EXPORT=static -lmbedcrypto
 
-o/test-omemo2: test/omemo.c c25519.c omemo.c o/msg2.bin
-	$(CC) -o $@ test/omemo.c c25519.c $(CFLAGS) -DOMEMO_EXPORT=static -DOMEMO2 -lmbedcrypto
+o/test-omemo2:  test/omemo.c c25519.c hacl.c omemo.c o/msg2.bin
+	$(CC) -o $@ test/omemo.c c25519.c hacl.c $(CFLAGS) -DOMEMO_EXPORT=static -DOMEMO2 -lmbedcrypto
 
 o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | test/store.inc test/cacert.inc
 	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
