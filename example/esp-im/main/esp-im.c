@@ -52,6 +52,9 @@ int omemoStoreMessageKey(struct omemoSession *, const struct omemoMessageKey *, 
 
 void LoadSession() {}
 void SaveSession() {}
+void BeginTransaction() {}
+void CancelTransaction() {}
+void CommitTransaction() {}
 
 static void SetupStdio(void) {
   setvbuf(stdin, NULL, _IONBF, 0);

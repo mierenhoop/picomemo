@@ -1,59 +1,49 @@
-## Notice
-
-Do not use the code in this repository for anything serious yet; there
-might be unidentified security vulnerabilities present. You are
-encouraged to report such issues when found.
-
 ## About
 
-The file `omemo.c` contains a compact implementation of OMEMO.
+This repository contains a compact and portable implementation of the
+cryptography required for XMPP's OMEMO (E2EE).
 
-### Goals
+### Features
 
-- Run on embedded: support for ESP32 on ESP-IDF & Raspberry Pi Pico
-  \[W\] on pico-sdk (untested).
+- Portable, even runs on embedded systems like the ESP32!
 
-- Be portable to any OS.
+- Compatible with other XMPP clients that support OMEMO.
 
-- Work with all relevant clients that have OMEMO.
+- Low amount of code with few dependencies.
 
-- Low amount of code while still being readable.
-
-- Control of memory management.
-
-### Non-goals
-
-- Support multiple OMEMO versions at once.
+- High performance, uses fast crypto when available.
 
 ## `omemo.c`
 
- `omemo.c` contains implementations of X3DH, Double Ratchet and
- Protobuf with an API that is specifically tailored to OMEMO. We do not
- have dependencies on (any) libsignal or libolm code.
+`omemo.c` contains implementations of X3DH, Double Ratchet and
+Protobuf with an API that is specifically tailored to OMEMO. Without
+dependencies on (any) libsignal or libolm code.
 
 Both OMEMO 0.3 (`eu.siacs.conversations.axolotl`) and OMEMO 0.9
 (`urn:xmpp:omemo:2`) are supported. By default OMEMO 0.3 is enabled and
-when compiled with `-DOMEMO2` the OMEMO 0.9 is enabled. That means only
+when compiled with `-DOMEMO2`, OMEMO 0.9 is enabled. That means only
 one is active at a time. It is possible to include both versions in a
-client by linking both separately as a shared library, which is done in
-the Lua bindings.
+client by linking both separately as a shared library as is done in
+the Lua bindings, or by compiling with `-DOMEMO_EXPORT=static` and
+directly including `omemo.c` while somehow reexporting the API.
 
- Curve25519 and Ed25519 functions are handled by the
- [c25519](https://www.dlbeer.co.nz/oss/c25519.html) library, which is
- included as amalgamation in `/c25519.c` and `/c25519.h`. Some changes
- have been made there which can be inspected with `$ git diff 2eef25dc
- -- c25519.*`. This Curve25519 implementation is noticably slower than
- curve25519\_donna. Decrypting messages can take hundreds of
- milliseconds to seconds and filling a hundred prekeys can take up to
- minutes on microcontrollers. To speed things up, [cosmopolitan's
- overhaul](https://github.com/jart/cosmopolitan/blob/master/third_party/mbedtls/everest.c)
- of the [Everest](https://project-everest.github.io/) Curve25519
- implementation is enabled on supported systems.
+### Crypto functions
+
+There are two "backends" for the underlying Curve25519 and EdDSA
+cryptography. By default these are provided by
+[HACL\*](https://github.com/hacl-star/hacl-star) as an amalgamation in
+`hacl.c`. These are both fast and formally verified.
+
+As an alternative there is the
+[c25519](https://www.dlbeer.co.nz/oss/c25519.html) library, which is
+also included as amalgamation in `/c25519.c` and `/c25519.h`. This
+library was designed for low-memory systems and is significantly slower
+on modern hardware than HACL\*.
 
 ## `lomemo`
 
-In the `lua` subdirectory there are Lua bindings for both versions of
-OMEMO. They are compiled as `lomemo.so` and `lomemo2.so`.
+In the `lua` subdirectory there are Lua bindings for this library. With
+support for Lua 5.1 up to at least Lua 5.4.
 
 ## Dependencies
 
@@ -71,57 +61,117 @@ Running the tests:
 
  `$ make test-omemo`
 
-Using this library for your own project:
+**Using this library in your project:**
 
-If you want to use OMEMO, copy over `/omemo.c`, `/omemo.h`,
-`/c25519.c` and `/c25519.h`.
+Copy over the source files, `omemo.c/h` are mandatory and you have to
+choose either `c25519.c/h` or `hacl.c/h`.
 
 You must link against libmbedcrypto (and/or configure your mbedtls build
-to only include the needed functions.
+to only include the required functions.
 
-### Example
+## API
 
-The [`im.c`](./example/im.c) example shows how additional
-functionality can be used in combination with the library. The example
-is not a feature complete instant messenger and for simplicity's sake
-the code is full of hardcoded and spec deviating behaviour that should
-not represent a serious XMPP client.
+Refer to `omemo.h` for function definitions and function-specific
+documentation.
 
-Run the im (instant messenger) example:
+To give an understanding how the API can be integrated in a client, here
+is some pseudocode for a rough overview of how the functions can be used:
 
-`$ make runim`
+```diff
 
-By default the localhost self-signed certificate is used. For a simple
-test you can spin up prosody (`$ make start-prosody`) and run the echo
-bot (`$ make start-omemo-bot`).
+// Implement random callback (required!)
+int omemoRandom(p, n) {
+    getrandom(p, n, 0)
+    return 0
+}
 
-Compile the esp-idf version of the im:
+class XmppClient {
+    struct omemoStore store
+    Map<(Jid, DeviceId), struct omemoSession> sessions
 
-```bash
-$ cat > example/esp-im/config.h <<EOF
-#define IM_WIFI_SSID "ssid"
-#define IM_WIFI_PASS "password"
-#define IM_SERVER_IP "192.168.1.2"
-EOF
+    Setup() {
+        // Loading/Saving OMEMO store (your bundle of keys)
+        storebin = ReadFile("store.bin")
+        if storebin {
+>           omemoDeserializeStore(storebin, len(storebin), &store)
+        } else {
+>           omemoSetupStore(&store)
+            file = OpenFile("store.bin")
+>           file.buffer_size = omemoGetSerializedStoreSize(&store)
+>           omemoSerializeStore(file.buffer, &store)
+            // Extract keys/ids from the store for publishing your bundle
+            PublishBundle(&store)
+        }
+        // Key should be rotated once every week to month, remember to
+        // save the store to disk after any changes AND publish your new
+        // bundle.
+>       setInterval(() => omemoRotateSignedPreKey(&store), 1*Week)
+    }
+
+    SendEncryptedMessage(to_jid, body) {
+        // With OMEMO 0.3 you can omit omemoGetMessagePadSize
+        encrypted_buf = malloc(len(body)+omemoGetMessagePadSize(len(body)))
+>       omemoEncryptMessage(encrypted_buf, out key_payload, out iv, body,
+        len(body))
+
+        // Get device list via (cached) iq stanza
+        for device_id in GetDevices(to_jid) {
+            session = sessions.Get(to_jid, device_id)
+            if not session {
+                session = {0}
+                bundlexml = FetchBundle(to_id, device_id)
+                struct omemoBundle bundle
+                FillBundle(&bundle, bundlexml)
+>               omemoInitFromBundle(&session, &store, &bundle)
+>               sessions.Set(to_jid, device_id, session)
+            }
+>           omemoEncryptKey(&session, &store, out key_msg, key_payload)
+            headers.append(MakeXml(key_msg.isprekey, key_msg.p, key_msg.n))
+            // Save session into some database/file just like the store
+>           omemoSerializeSession(..., &session)
+            // Also save the store the store (not shown)
+        }
+        SendMessage(MakeXml(headers, encrypted_buf, iv))
+    }
+
+    event GotMessage(msg) {
+        if msg.is_omemo_encrypted? {
+            // For decryption, the functions omemoLoadMessageKey and
+            // omemoStoreMessageKey will be called, you must implement
+            // them just like omemoRandom at the top level (shown here
+            // for demonstration purposes.
+>           int omemoLoadMessageKey(session, key) {
+                key.mk = skipped_keys[session][key.dh, key.nr]
+                return Found?(key.mk) ? 0 : 1
+            }
+
+>           int omemoStoreMessageKey(session, key, n) {
+                if n > MAX_SKIP_KEYS {
+                    return OMEMO_EUSER
+                }
+                skipped_keys[session][key.dh, key.nr] = key.mk
+            }
+
+            // Search the XML of the message for our key and get the
+            // prekey/kex attribute
+            key, isprekey = FindKeyForOurDevice(msg)
+>           omemoDecryptKey(&session, &store, out key_payload, isprekey, key)
+            if isprekey {
+                // A prekey is used, publish your bundle again
+                // without that prekey!
+                PublishBundle(&store)
+            }
+            plaintext = allocate(len(msg.payload))
+>           omemoDecryptMessage(plaintext, key_payload, msg.iv, msg.payload, len(msg.payload))
+            // Save session and store here again (not shown), also save
+            // the skipped keys!
+            ShowPlaintextMessage(plaintext)
+        }
+    }
+}
+
 ```
-
-`$ make esp-im`
-
-`$ ESP_DEV=/dev/ttyUSB0 make esp-upload`
-
-`$ ESP_DEV=/dev/ttyUSB0 make esp-monitor`
-
-### Demo of XMPP with OMEMO on an ESP32
-
-https://github.com/user-attachments/assets/b01d9439-f30b-4062-8711-02cbf9599e67
 
 ## License
 
-The code in this repository is licensed under ISC, all vendored code in
-this repository is also permissively licensed:
-
-yxml is licensed under MIT, c25519 is in the public domain and
-Everest Curve25519 is licensed under Apache-2.0.
-
-While not directly included, MbedTLS is dual-licensed under Apache-2.0
-or GPL-2.0-or-later.
+The code in this repository is licensed under ISC, all dependencies are also permissively licensed.
