@@ -1,6 +1,6 @@
-CFLAGS=-g -Wall -Wno-pointer-sign -I. -MMD -MP
+CFLAGS+=-g -Wall -Wno-pointer-sign -I. -MMD -MP
 
-OMEMOSRCS=c25519.c omemo.c
+OMEMOSRCS=c25519.c hacl.c omemo.c
 XMPPSRCS=example/xmpp.c example/yxml.c
 IMSRCS=example/im.c
 

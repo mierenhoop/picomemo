@@ -24,8 +24,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
+#ifdef OMEMO_NOHACL
 #include "c25519.h"
+#else
+#include "hacl.h"
+#endif
 
 #include "omemo.h"
 
@@ -319,16 +324,32 @@ FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE],
 
 /*************************** CRYPTOGRAPHY ****************************/
 
-#ifndef OMEMO2
-static void ConvertCurvePrvToEdPub(omemoKey ed, const omemoKey prv) {
-  struct ed25519_pt p;
-  ed25519_smult(&p, &ed25519_base, prv);
-  uint8_t x[F25519_SIZE];
-  uint8_t y[F25519_SIZE];
-  ed25519_unproject(x, y, &p);
-  ed25519_pack(ed, x, y);
-}
+static void GetCurve25519Pub(omemoKey pub, omemoKey prv) {
+  prv[0] &= 0xf8;
+  prv[31] &= 0x7f;
+  prv[31] |= 0x40;
+#ifdef OMEMO_NOHACL
+  c25519_smult(pub, c25519_base_x, prv);
+#else
+  Hacl_Curve25519_51_secret_to_public(pub, prv);
 #endif
+}
+
+/**
+ * @returns OMEMO_ECORRUPT if the generated shared secret is not secure
+ */
+static int DoX25519(omemoKey shared, const omemoKey prv, const omemoKey pub) {
+#ifdef OMEMO_NOHACL
+  c25519_smult(shared, pub, prv);
+  // TODO: implement the same check
+  return 0;
+#else
+  omemoKey tmp, tmp2;
+  memcpy(tmp, prv, 32);
+  memcpy(tmp2, pub, 32);
+  return Hacl_Curve25519_51_ecdh(shared, tmp, tmp2) ? 0 : OMEMO_ECORRUPT;
+#endif
+}
 
 // For OMEMO 0.3, we use the sign_modified as is required.
 // For OMEMO >0.3 (OMEMO2 here), the spec describes two options.
@@ -353,13 +374,28 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
   uint8_t msgbuf[SerLen+64];
   memcpy(msgbuf, msg, msgn);
   memcpy(msgbuf + msgn, rnd, 64);
+  omemoKey ikprv, ikpub;
+  memcpy(ikprv, ik->prv, 32);
+  memcpy(ikpub, ik->pub, 32);
 #ifdef OMEMO2
-  edsign_sign_modified(sig, ik->pub, ik->prv, msgbuf, msgn);
+#ifdef OMEMO_NOHACL
+  edsign_sign_modified(sig, ikpub, ikprv, msgbuf, msgn);
+#else
+  Hacl_Ed25519_sign_modified(sig, ikpub, ikprv, msgbuf, msgn);
+#endif
 #else
   omemoKey ed;
-  ConvertCurvePrvToEdPub(ed, ik->prv);
+#ifdef OMEMO_NOHACL
+  edsign_sm_pack(ed, ikprv);
+#else
+  Hacl_Ed25519_pub_from_Curve25519_priv(ed, ikprv);
+#endif
   int sign = ed[31] & 0x80;
-  edsign_sign_modified(sig, ed, ik->prv, msgbuf, msgn);
+#ifdef OMEMO_NOHACL
+  edsign_sign_modified(sig, ed, ikprv, msgbuf, msgn);
+#else
+  Hacl_Ed25519_sign_modified(sig, ed, ikprv, msgbuf, msgn);
+#endif
   sig[63] &= 0x7f;
   sig[63] |= sign;
 #endif
@@ -370,36 +406,54 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
 static bool VerifySignature(const omemoCurveSignature sig,
                             const omemoKey pub, const uint8_t *msg,
                             size_t msgn) {
-#ifdef OMEMO2
-  return !!edsign_verify(sig, pub, msg, msgn);
-#else
-  omemoKey ed;
-  morph25519_mx2ey(ed, pub);
-  ed[31] &= 0x7f;
-  ed[31] |= sig[63] & 0x80;
+  assert(msgn <= SerLen);
+  uint8_t msgbuf[SerLen];
+  memcpy(msgbuf, msg, msgn);
+  omemoKey pubcpy;
+  memcpy(pubcpy, pub, 32);
   omemoCurveSignature sig2;
   memcpy(sig2, sig, 64);
+#ifdef OMEMO2
+#ifdef OMEMO_NOHACL
+  return !!edsign_verify(sig2, pubcpy, msgbuf, msgn);
+#else
+  return Hacl_Ed25519_verify(pubcpy, msgn, msgbuf, sig2);
+#endif
+#else
+  omemoKey ed;
+#ifdef OMEMO_NOHACL
+  morph25519_mx2ey(ed, pubcpy);
+#else
+  Hacl_Curve25519_pub_to_Ed25519_pub(ed, pubcpy);
+#endif
+  ed[31] &= 0x7f;
+  ed[31] |= sig[63] & 0x80;
   sig2[63] &= 0x7f;
-  return !!edsign_verify(sig2, ed, msg, msgn);
+#ifdef OMEMO_NOHACL
+  return !!edsign_verify(sig2, ed, msgbuf, msgn);
+#else
+  return Hacl_Ed25519_verify(ed, msgn, msgbuf, sig2);
+#endif
 #endif
 }
 
 static int GenerateKeyPair(struct omemoKeyPair *kp) {
   memset(kp, 0, sizeof(*kp));
   TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
-  c25519_prepare(kp->prv);
-  curve25519(kp->pub, kp->prv, c25519_base_x);
+  GetCurve25519Pub(kp->pub, kp->prv);
   return 0;
 }
 
 #ifdef OMEMO2
 static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
   memset(kp, 0, sizeof(*kp));
-  TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
-  edsign_sec_to_pub(kp->pub, kp->prv);
-  uint8_t exp[64];
-  expand_key(exp, kp->prv);
-  memcpy(kp->prv, exp, 32);
+  omemoKey seed;
+  TRY(omemoRandom(seed, 32));
+#ifdef OMEMO_NOHACL
+  edsign_sec_to_pub(kp->pub, kp->prv, seed);
+#else
+  Hacl_Ed25519_seed_to_pub_priv(kp->pub, kp->prv, seed);
+#endif
   return 0;
 }
 #endif
@@ -633,7 +687,7 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
 // NOTE: OMEMO2 COMPLIANT
 static int DeriveRootKey(struct omemoState *state, omemoKey ck) {
   uint8_t secret[32], masterkey[64];
-  curve25519(secret, state->dhs.prv, state->dhr);
+  TRY(DoX25519(secret, state->dhs.prv, state->dhr));
   TRY(DeriveKey(state->rk, secret, HkdfInfoRootChain, masterkey));
   memcpy(state->rk, masterkey, 32);
   memcpy(ck, masterkey + 32, 32);
@@ -652,11 +706,11 @@ static int GetSharedSecret(omemoKey sk, bool isbob, const omemoKey ika,
   uint8_t secret[32 * 5] = {0}, tmpkey[32];
   memset(secret, 0xff, 32);
   // When we are bob, we must swap the first two.
-  curve25519(secret + 32, isbob ? ska : ika, isbob ? ikb : spkb);
-  curve25519(secret + 64, isbob ? ika : ska, isbob ? spkb : ikb);
-  curve25519(secret + 96, ska, spkb);
+  TRY(DoX25519(secret + 32, isbob ? ska : ika, isbob ? ikb : spkb));
+  TRY(DoX25519(secret + 64, isbob ? ika : ska, isbob ? spkb : ikb));
+  TRY(DoX25519(secret + 96, ska, spkb));
   // OMEMO mandates that the bundle MUST contain a prekey.
-  curve25519(secret + 128, eka, opkb);
+  TRY(DoX25519(secret + 128, eka, opkb));
   TRY(DeriveKey(Zero32, secret, HkdfInfoKeyExchange, tmpkey));
   memcpy(sk, tmpkey, 32);
   return 0;
@@ -699,7 +753,11 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   omemoKey ik, edy;
   memcpy(edy, bundle->ik, 32);
   edy[31] &= 0x7f;
+#ifdef OMEMO_NOHACL
   morph25519_e2m(ik, edy);
+#else
+  Hacl_Ed25519_pub_to_Curve25519_pub(ik, edy);
+#endif
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       ik, bundle->spk, bundle->pk));
 #else
@@ -940,7 +998,11 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
       omemoKey ik, edy;
       memcpy(edy, fields[PbKeyEx_ik].p, 32);
       edy[31] &= 0x7f;
+#ifdef OMEMO_NOHACL
       morph25519_e2m(ik, edy);
+#else
+      Hacl_Ed25519_pub_to_Curve25519_pub(ik, edy);
+#endif
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
                           pk->kp.prv, ik, fields[PbKeyEx_ek].p,
                           fields[PbKeyEx_ek].p));
