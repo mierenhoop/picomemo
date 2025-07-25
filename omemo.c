@@ -185,6 +185,7 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
     found |= 1 << id;
     if (!(s = ParseVarInt(s, e, &v)))
       return true;
+    // If field is fixed size, enforce it
     if (fields[id].v && v != fields[id].v)
       return true;
     fields[id].v = v;
@@ -202,13 +203,11 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
   return false;
 }
 
-// TODO: can we incorporate this in ParseProtobuf?
-static bool ParseRepeatingField(const uint8_t *s, size_t n,
+static bool ParseRepeatingField(const uint8_t *s, const uint8_t *e,
                                 struct ProtobufField *field,
                                 int fieldid) {
   int type, id;
   uint32_t v;
-  const uint8_t *e = s + n;
   assert(fieldid <= 16);
   while (s < e) {
     type = *s & 7;
@@ -228,9 +227,7 @@ static bool ParseRepeatingField(const uint8_t *s, size_t n,
     if (id == fieldid)
       break;
   }
-  if (s > e)
-    return true;
-  return false;
+  return s > e;
 }
 
 /**
@@ -254,7 +251,7 @@ static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id,
 }
 
 #ifndef OMEMO2
-static uint8_t *FormatSerializedKey(uint8_t d[35], int id,
+static uint8_t *FormatSerializedKey(uint8_t d[static 35], int id,
                                     const omemoKey k) {
   assert(id < 16);
   *d++ = (id << 3) | PB_LEN;
@@ -264,7 +261,7 @@ static uint8_t *FormatSerializedKey(uint8_t d[35], int id,
 }
 #endif
 
-static uint8_t *FormatKey(uint8_t d[34], int id, const omemoKey k) {
+static uint8_t *FormatKey(uint8_t d[static 34], int id, const omemoKey k) {
   assert(id < 16);
   *d++ = (id << 3) | PB_LEN;
   *d++ = 32;
@@ -277,7 +274,7 @@ static uint8_t *FormatKey(uint8_t d[34], int id, const omemoKey k) {
 // This is OMEMOMessage in schema
 // NOTE: OMEMO2 COMPLIANT
 static size_t
-FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
+FormatPreKeyMessage(uint8_t d[static OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
                     uint32_t pk_id, uint32_t spk_id, const omemoKey ik,
                     const omemoKey ek, uint32_t msgsz) {
   uint8_t *p = d;
@@ -289,7 +286,7 @@ FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
   p = FormatVarInt(p, PB_LEN, 5, msgsz);
 #else
   *p++ = (3 << 4) | 3;
-  p = FormatVarInt(p, PB_UINT32, 5, 0xcc); // TODO: registration id
+  p = FormatVarInt(p, PB_UINT32, 5, 0); // registration id
   p = FormatVarInt(p, PB_UINT32, 1, pk_id);
   p = FormatVarInt(p, PB_UINT32, 6, spk_id);
   p = FormatSerializedKey(p, 3, ik);
@@ -302,7 +299,7 @@ FormatPreKeyMessage(uint8_t d[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
 // Format Protobuf WhisperMessage without ciphertext.
 //  HEADER(dh_pair, pn, n)
 static size_t
-FormatMessageHeader(uint8_t d[OMEMO_INTERNAL_HEADER_MAXSIZE],
+FormatMessageHeader(uint8_t d[static OMEMO_INTERNAL_HEADER_MAXSIZE],
                     uint32_t n, uint32_t pn, const omemoKey dhs) {
   uint8_t *p = d;
 #ifdef OMEMO2
@@ -1208,7 +1205,7 @@ OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
   const char *e = p + n;
   int i = 0;
   while (i < OMEMO_NUMPREKEYS &&
-         !ParseRepeatingField(p, e - p, &fields[13], 13) &&
+         !ParseRepeatingField(p, e, &fields[13], 13) &&
          fields[13].p) {
     struct ProtobufField innerfields[] = {
         [1] = {PB_REQUIRED | PB_UINT32},

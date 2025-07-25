@@ -35,7 +35,7 @@
 #include "omemo.h"
 
 #include "test/cacert.inc"
-#include "test/store.inc"
+#include "o/store.inc"
 
 #include "system.h"
 

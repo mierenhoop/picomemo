@@ -24,9 +24,9 @@
 #include <sys/random.h>
 
 #ifdef OMEMO2
-#include "test/store2.inc"
+#include "o/store2.inc"
 #else
-#include "test/store.inc"
+#include "o/store.inc"
 #endif
 
 // TODO: for all exposed functions, test all error paths

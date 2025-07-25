@@ -23,12 +23,50 @@
 
 #include "test/defaultcallbacks.inc"
 
-int main() {
+FILE *f;
+
+void PrintHex(const uint8_t *p, size_t n) {
+  fprintf(f, "bytes.fromhex('");
+  for (int i = 0; i < n; i++) fprintf(f, "%02x", p[i]);
+  fprintf(f, "')\n");
+}
+
+void PrintSer(omemoKey k) {
+  omemoSerializedKey ser;
+  omemoSerializeKey(ser, k);
+  PrintHex(ser, sizeof(ser));
+}
+
+
+int main(int argc, char **argv) {
+  assert(argc == 3);
   struct omemoStore store;
   assert(!omemoSetupStore(&store));
   size_t n = omemoGetSerializedStoreSize(&store);
-  char *buf = malloc(n);
+  uint8_t *buf = malloc(n);
   assert(buf);
   omemoSerializeStore(buf, &store);
-  fwrite(buf, n, 1, stdout);
+  f = fopen(argv[1], "w");
+  assert(f);
+  fprintf(f, "unsigned char store_inc[] = {");
+  for (int i = 0; i < n; i++) {
+    if (i % 12 == 0)
+      fprintf(f, "\n ");
+    fprintf(f, " 0x%02x,", buf[i]);
+  }
+  fprintf(f, "\n};\nunsigned int store_inc_len = %ld;\n", n);
+  fclose(f);
+
+  f=fopen(argv[2], "w");
+  assert(f);
+  fprintf(f, "ik=");PrintSer(store.identity.pub);
+  fprintf(f, "spk=");PrintSer(store.cursignedprekey.kp.pub);
+  fprintf(f, "spks=");PrintHex(store.cursignedprekey.sig, 64);
+  fprintf(f, "spk_id=%d\n",store.cursignedprekey.id);
+  fprintf(f, "pks={}\n");
+  for (int i = 0; i < OMEMO_NUMPREKEYS; i++) {
+    fprintf(f, "pks[%d]=",store.prekeys[i].id);
+    PrintSer(store.prekeys[i].kp.pub);
+  }
+  fclose(f);
 }

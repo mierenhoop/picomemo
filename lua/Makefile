@@ -11,13 +11,13 @@ test: lomemo.so $(STORES)
 $(STORES): lomemo.so
 	for store in $(STORES); do \
 		mkdir -p $$(dirname $$store); \
-		$(LUA) -e 'io.write(require"lomemo".SetupStore():Serialize())' > $$store; \
+		$(LUA) -llomemo -e 'io.write(lomemo.SetupStore():Serialize())' > $$store; \
 	done
 
-lomemo.so: lomemo.c ../omemo.c ../c25519.c
+lomemo.so: lomemo.c ../omemo.c ../hacl.c
 	cc -shared -o $@ $^ $(CFLAGS) -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
 
-lomemo2.so: lomemo.c ../omemo.c ../c25519.c
+lomemo2.so: lomemo.c ../omemo.c ../hacl.c
 	cc -shared -o $@ $^ $(CFLAGS) -DOMEMO2 -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
 
 .PHONY: clean
