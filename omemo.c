@@ -71,6 +71,28 @@
 
 #endif
 
+#ifdef OMEMO_NOHACL
+
+#define SignModified edsign_sign_modified
+#define MulPackEd edsign_sm_pack
+#define VerifyEd(sig, pub, msg, n) (!!edsign_verify(sig, pub, msg, n))
+#define MapToEd morph25519_mx2ey
+#define MakeEdKeys edsign_sec_to_pub
+#define CalcCurve25519(pub, prv) c25519_smult(pub, c25519_base_x, prv)
+#define MapToMont morph25519_e2m
+
+#else
+
+#define SignModified Hacl_Ed25519_sign_modified
+#define MulPackEd Hacl_Ed25519_pub_from_Curve25519_priv
+#define VerifyEd(sig, pub, msg, n) Hacl_Ed25519_verify(pub, n, msg, sig)
+#define MapToEd Hacl_Curve25519_pub_to_Ed25519_pub
+#define MakeEdKeys Hacl_Ed25519_seed_to_pub_priv
+#define CalcCurve25519(pub, prv) Hacl_Curve25519_51_secret_to_public(pub, prv)
+#define MapToMont Hacl_Ed25519_pub_to_Curve25519_pub
+
+#endif
+
 #define TRY(expr)                                                      \
   do {                                                                 \
     int _r_;                                                           \
@@ -96,7 +118,7 @@ OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
 }
 
 // Actually returns omemoKey
-static inline const uint8_t *GetDeser(const omemoSerializedKey k) {
+static inline const uint8_t *GetRawKey(const omemoSerializedKey k) {
 #ifdef OMEMO2
   return k;
 #else
@@ -108,7 +130,7 @@ static inline const uint8_t *GetDeser(const omemoSerializedKey k) {
 
 // Protobuf: https://protobuf.dev/programming-guides/encoding/
 
-// Only supports uint32 and len prefixed (by int32).
+// Only supports uint32 and len prefixed.
 struct ProtobufField {
   int type;         // PB_*
   uint32_t v;       // destination varint or LEN
@@ -271,8 +293,7 @@ static uint8_t *FormatKey(uint8_t d[static 34], int id, const omemoKey k) {
 
 // Format Protobuf PreKeyWhisperMessage without message (it should be
 // appended right after this call).
-// This is OMEMOMessage in schema
-// NOTE: OMEMO2 COMPLIANT
+// This is OMEMOKeyExchange in schema
 static size_t
 FormatPreKeyMessage(uint8_t d[static OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
                     uint32_t pk_id, uint32_t spk_id, const omemoKey ik,
@@ -283,6 +304,7 @@ FormatPreKeyMessage(uint8_t d[static OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
   p = FormatVarInt(p, PB_UINT32, 2, spk_id);
   p = FormatKey(p, 3, ik);
   p = FormatKey(p, 4, ek);
+  // msgsz can be > 127 so we reserve 3 bytes for this
   p = FormatVarInt(p, PB_LEN, 5, msgsz);
 #else
   *p++ = (3 << 4) | 3;
@@ -291,6 +313,7 @@ FormatPreKeyMessage(uint8_t d[static OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
   p = FormatVarInt(p, PB_UINT32, 6, spk_id);
   p = FormatSerializedKey(p, 3, ik);
   p = FormatSerializedKey(p, 2, ek);
+  assert(msgsz < 128);
   p = FormatVarInt(p, PB_LEN, 4, msgsz);
 #endif
   return p - d;
@@ -306,31 +329,18 @@ FormatMessageHeader(uint8_t d[static OMEMO_INTERNAL_HEADER_MAXSIZE],
   p = FormatVarInt(p, PB_UINT32, 1, n);
   p = FormatVarInt(p, PB_UINT32, 2, pn);
   p = FormatKey(p, 3, dhs);
-  *p++ = (4 << 3) | PB_LEN;
-  *p++ = OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
+  p = FormatVarInt(p, PB_LEN, 4, OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE);
 #else
   *p++ = (3 << 4) | 3;
   p = FormatSerializedKey(p, 1, dhs);
   p = FormatVarInt(p, PB_UINT32, 2, n);
   p = FormatVarInt(p, PB_UINT32, 3, pn);
-  *p++ = (4 << 3) | PB_LEN;
-  *p++ = OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
+  p = FormatVarInt(p, PB_LEN, 4, OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE);
 #endif
   return p - d;
 }
 
 /*************************** CRYPTOGRAPHY ****************************/
-
-static void GetCurve25519Pub(omemoKey pub, omemoKey prv) {
-  prv[0] &= 0xf8;
-  prv[31] &= 0x7f;
-  prv[31] |= 0x40;
-#ifdef OMEMO_NOHACL
-  c25519_smult(pub, c25519_base_x, prv);
-#else
-  Hacl_Curve25519_51_secret_to_public(pub, prv);
-#endif
-}
 
 /**
  * @returns OMEMO_ECORRUPT if the generated shared secret is not secure
@@ -375,24 +385,12 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
   memcpy(ikprv, ik->prv, 32);
   memcpy(ikpub, ik->pub, 32);
 #ifdef OMEMO2
-#ifdef OMEMO_NOHACL
-  edsign_sign_modified(sig, ikpub, ikprv, msgbuf, msgn);
-#else
-  Hacl_Ed25519_sign_modified(sig, ikpub, ikprv, msgbuf, msgn);
-#endif
+  SignModified(sig, ikpub, ikprv, msgbuf, msgn);
 #else
   omemoKey ed;
-#ifdef OMEMO_NOHACL
-  edsign_sm_pack(ed, ikprv);
-#else
-  Hacl_Ed25519_pub_from_Curve25519_priv(ed, ikprv);
-#endif
+  MulPackEd(ed, ikprv);
   int sign = ed[31] & 0x80;
-#ifdef OMEMO_NOHACL
-  edsign_sign_modified(sig, ed, ikprv, msgbuf, msgn);
-#else
-  Hacl_Ed25519_sign_modified(sig, ed, ikprv, msgbuf, msgn);
-#endif
+  SignModified(sig, ed, ikprv, msgbuf, msgn);
   sig[63] &= 0x7f;
   sig[63] |= sign;
 #endif
@@ -411,33 +409,24 @@ static bool VerifySignature(const omemoCurveSignature sig,
   omemoCurveSignature sig2;
   memcpy(sig2, sig, 64);
 #ifdef OMEMO2
-#ifdef OMEMO_NOHACL
-  return !!edsign_verify(sig2, pubcpy, msgbuf, msgn);
-#else
-  return Hacl_Ed25519_verify(pubcpy, msgn, msgbuf, sig2);
-#endif
+  return VerifyEd(sig2, pubcpy, msgbuf, msgn);
 #else
   omemoKey ed;
-#ifdef OMEMO_NOHACL
-  morph25519_mx2ey(ed, pubcpy);
-#else
-  Hacl_Curve25519_pub_to_Ed25519_pub(ed, pubcpy);
-#endif
+  MapToEd(ed, pubcpy);
   ed[31] &= 0x7f;
   ed[31] |= sig[63] & 0x80;
   sig2[63] &= 0x7f;
-#ifdef OMEMO_NOHACL
-  return !!edsign_verify(sig2, ed, msgbuf, msgn);
-#else
-  return Hacl_Ed25519_verify(ed, msgn, msgbuf, sig2);
-#endif
+  return VerifyEd(sig2, ed, msgbuf, msgn);
 #endif
 }
 
 static int GenerateKeyPair(struct omemoKeyPair *kp) {
   memset(kp, 0, sizeof(*kp));
   TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
-  GetCurve25519Pub(kp->pub, kp->prv);
+  kp->prv[0] &= 0xf8;
+  kp->prv[31] &= 0x7f;
+  kp->prv[31] |= 0x40;
+  CalcCurve25519(kp->pub, kp->prv);
   return 0;
 }
 
@@ -446,11 +435,7 @@ static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
   memset(kp, 0, sizeof(*kp));
   omemoKey seed;
   TRY(omemoRandom(seed, 32));
-#ifdef OMEMO_NOHACL
-  edsign_sec_to_pub(kp->pub, kp->prv, seed);
-#else
-  Hacl_Ed25519_seed_to_pub_priv(kp->pub, kp->prv, seed);
-#endif
+  MakeEdKeys(kp->pub, kp->prv, seed);
   return 0;
 }
 #endif
@@ -601,7 +586,6 @@ struct __attribute__((__packed__)) DeriveChainKeyOutput {
 
 // d may be the same pointer as ck
 //  ck, mk = KDF_CK(ck)
-// NOTE: OMEMO2 COMPLIANT
 static int GetBaseMaterials(omemoKey d, omemoKey mk,
                             const omemoKey ck) {
   uint8_t data[1] = {1};
@@ -632,7 +616,7 @@ static int EncryptKeyImpl(struct omemoSession *session,
   msg->n += 16;
   msg->p[msg->n++] = (2 << 3) | PB_LEN;
   // Hmac'd message will always be smaller than 128
-  msg->p[msg->n++] = 0xcc; // replaced with actual size
+  msg->p[msg->n++] = 0x55; // replaced with actual size
 #endif
   msg->n +=
       FormatMessageHeader(msg->p + msg->n, session->state.ns,
@@ -681,7 +665,6 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
 }
 
 // RK, ck = KDF_RK(RK, DH(DHs, DHr))
-// NOTE: OMEMO2 COMPLIANT
 static int DeriveRootKey(struct omemoState *state, omemoKey ck) {
   uint8_t secret[32], masterkey[64];
   TRY(DoX25519(secret, state->dhs.prv, state->dhr));
@@ -731,8 +714,6 @@ static int RatchetInitAlice(struct omemoState *state, const omemoKey sk,
   return DeriveRootKey(state, state->cks);
 }
 
-// We can remove the bundle struct all together by inlining the fields
-// as arguments.
 OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
                         const struct omemoStore *store,
                         const struct omemoBundle *bundle) {
@@ -750,11 +731,7 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   omemoKey ik, edy;
   memcpy(edy, bundle->ik, 32);
   edy[31] &= 0x7f;
-#ifdef OMEMO_NOHACL
-  morph25519_e2m(ik, edy);
-#else
-  Hacl_Ed25519_pub_to_Curve25519_pub(ik, edy);
-#endif
+  MapToMont(ik, edy);
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       ik, bundle->spk, bundle->pk));
 #else
@@ -891,7 +868,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
 
   uint32_t headern = fields[PbMsg_n].v;
   uint32_t headerpn = fields[PbMsg_pn].v;
-  const uint8_t *headerdh = GetDeser(fields[PbMsg_dh_pub].p);
+  const uint8_t *headerdh = GetRawKey(fields[PbMsg_dh_pub].p);
 
   bool shouldstep = !!memcmp(session->state.dhr, headerdh, 32);
 
@@ -989,25 +966,21 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
       if (!pk || !spk)
         return OMEMO_ECORRUPT;
       omemoKey sk;
-      memcpy(session->remoteidentity, GetDeser(fields[PbKeyEx_ik].p),
+      memcpy(session->remoteidentity, GetRawKey(fields[PbKeyEx_ik].p),
              32);
 #ifdef OMEMO2
       omemoKey ik, edy;
       memcpy(edy, fields[PbKeyEx_ik].p, 32);
       edy[31] &= 0x7f;
-#ifdef OMEMO_NOHACL
-      morph25519_e2m(ik, edy);
-#else
-      Hacl_Ed25519_pub_to_Curve25519_pub(ik, edy);
-#endif
+      MapToMont(ik, edy);
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
                           pk->kp.prv, ik, fields[PbKeyEx_ek].p,
                           fields[PbKeyEx_ek].p));
 #else
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
-                          pk->kp.prv, GetDeser(fields[PbKeyEx_ik].p),
-                          GetDeser(fields[PbKeyEx_ek].p),
-                          GetDeser(fields[PbKeyEx_ek].p)));
+                          pk->kp.prv, GetRawKey(fields[PbKeyEx_ik].p),
+                          GetRawKey(fields[PbKeyEx_ek].p),
+                          GetRawKey(fields[PbKeyEx_ek].p)));
 #endif
       RatchetInitBob(&session->state, sk, &spk->kp);
     }

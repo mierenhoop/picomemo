@@ -8,8 +8,8 @@ ALLBINS=o/test-xmpp \
 		o/test-omemo \
 		o/test-omemo2 \
 		o/im \
-		o/generatestore \
-		o/generatestore2
+		o/generate \
+		o/generate2
 
 DEPS=$(ALLBINS:%=%.d)
 
@@ -35,10 +35,10 @@ o/test-omemo2:  test/omemo.c c25519.c hacl.c omemo.c o/store2.inc o/msg2.bin
 o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | o/store.inc test/cacert.inc
 	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
 
-o/generatestore: test/generatestore.c $(OMEMOSRCS) | test/defaultcallbacks.inc
+o/generate: test/generate.c $(OMEMOSRCS)
 	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
 
-o/generatestore2: test/generatestore.c $(OMEMOSRCS) | test/defaultcallbacks.inc
+o/generate2: test/generate.c $(OMEMOSRCS)
 	$(CC) -o $@ $^ $(CFLAGS) -DOMEMO2 -lmbedcrypto
 
 o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv/
@@ -53,11 +53,11 @@ test/localhost.crt:
 test/cacert.inc: test/localhost.crt
 	(cat test/localhost.crt; printf "\0") | xxd -i -name cacert_pem > $@
 
-o/store.inc o/bundle.py: o/generatestore
-	o/generatestore o/store.inc o/bundle.py
+o/store.inc o/bundle.py: o/generate
+	o/generate o/store.inc o/bundle.py
 
-o/store2.inc o/bundle2.py: o/generatestore2
-	o/generatestore2 o/store2.inc o/bundle2.py
+o/store2.inc o/bundle2.py: o/generate2
+	o/generate2 o/store2.inc o/bundle2.py
 
 ESP_DEV?=/dev/ttyUSB0
 

@@ -1,10 +1,6 @@
 /o/
 /tags
 /test/bot-venv/
-/test/store.inc
-/test/store2.inc
-/test/bundle.py
-/test/bundle2.py
 /example/esp-im/config.h
 /lua/*.so
 __pycache__

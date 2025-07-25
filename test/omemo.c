@@ -232,12 +232,11 @@ void TestEdPubToCurvePub() {
 }
 
 void TestCurvePubToEdPub() {
-  omemoKey prv, pub, ed1, ed2;
-  assert(!omemoRandom(prv,32));
-  c25519_prepare(prv);
-  GetCurve25519Pub(pub, prv);
-  Hacl_Curve25519_pub_to_Ed25519_pub(ed1, pub);
-  morph25519_mx2ey(ed2, pub);
+  struct omemoKeyPair kp;
+  omemoKey ed1, ed2;
+  assert(!GenerateKeyPair(&kp));
+  Hacl_Curve25519_pub_to_Ed25519_pub(ed1, kp.pub);
+  morph25519_mx2ey(ed2, kp.pub);
   assert(!memcmp(ed1, ed2, 32));
 }
 
