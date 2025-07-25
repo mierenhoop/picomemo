@@ -289,12 +289,12 @@ static void TestEncryption() {
 // user is either a or b
 #define Send(user, id) do { \
     assert(!omemoRandom(messages[id].payload, sizeof(omemoKeyPayload))); \
-    omemoEncryptKey(&session##user, &store##user, &messages[id].msg, messages[id].payload); \
+    assert(!omemoEncryptKey(&session##user, &store##user, &messages[id].msg, messages[id].payload)); \
   } while (0)
 
 #define Recv(user, id, isprekey) do { \
     omemoKeyPayload dec; \
-    omemoDecryptKey(&session##user, &store##user, dec, isprekey, messages[id].msg.p, messages[id].msg.n); \
+    assert(!omemoDecryptKey(&session##user, &store##user, dec, isprekey, messages[id].msg.p, messages[id].msg.n)); \
     assert(!memcmp(messages[id].payload, dec, sizeof(omemoKeyPayload))); \
   } while (0);
 

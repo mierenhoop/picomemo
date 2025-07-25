@@ -1,11 +1,11 @@
-## About
+## Picomemo
 
 This repository contains a compact and portable implementation of the
 cryptography required for XMPP's OMEMO (E2EE).
 
 ### Features
 
-- Portable, even runs on embedded systems like the ESP32!
+- Portable, even runs on WASM and embedded systems like the ESP32!
 
 - Compatible with other XMPP clients that support OMEMO.
 
@@ -69,7 +69,7 @@ choose either `c25519.c/h` or `hacl.c/h`.
 You must link against libmbedcrypto (and/or configure your mbedtls build
 to only include the required functions.
 
-## API
+### API
 
 Refer to `omemo.h` for function definitions and function-specific
 documentation.
@@ -171,6 +171,32 @@ class XmppClient {
 }
 
 ```
+
+### WASM
+
+This library can be compiled to Web Assembly using emscripten. Both
+crypto backends are supported.
+
+Running the test suite does require some changes:
+
+- In `test/omemo.c`, `omemoRandom()` has to be implemented with `rand()`
+  instead of `getrandom()`.
+
+- `curl -LO
+  "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2"
+  && tar -xjf mbedtls-3.6.4.tar.bz2 mbedtls` and compile using `emmake
+  make -C mbedtls lib`.
+
+- Add `-I mbedtls/include` to `CFLAGS`, change `-lmbedcrypto` to
+  `mbedtls/library/libmbedcrypto.a`.
+
+- Remove the dependency on `o/msg.bin` and comment out
+  `Test(TestSessionIntegration)`.
+
+- Run `make test/store.inc` (without `emmake`).
+
+- Now `emmake make o/test-omemo && node --no-experimental-fetch
+  o/test-omemo` should successfully complete the test suite.
 
 ## License
 
