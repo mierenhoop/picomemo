@@ -73,22 +73,23 @@
 
 #ifdef OMEMO_NOHACL
 
-#define SignModified edsign_sign_modified
-#define MulPackEd edsign_sm_pack
+#define SignModified               edsign_sign_modified
+#define MulPackEd                  edsign_sm_pack
 #define VerifyEd(sig, pub, msg, n) (!!edsign_verify(sig, pub, msg, n))
-#define MapToEd morph25519_mx2ey
-#define MakeEdKeys edsign_sec_to_pub
-#define CalcCurve25519(pub, prv) c25519_smult(pub, c25519_base_x, prv)
-#define MapToMont morph25519_e2m
+#define MapToEd                    morph25519_mx2ey
+#define MakeEdKeys                 edsign_sec_to_pub
+#define CalcCurve25519(pub, prv)   c25519_smult(pub, c25519_base_x, prv)
+#define MapToMont                  morph25519_e2m
 
 #else
 
-#define SignModified Hacl_Ed25519_sign_modified
-#define MulPackEd Hacl_Ed25519_pub_from_Curve25519_priv
+#define SignModified               Hacl_Ed25519_sign_modified
+#define MulPackEd                  Hacl_Ed25519_pub_from_Curve25519_priv
 #define VerifyEd(sig, pub, msg, n) Hacl_Ed25519_verify(pub, n, msg, sig)
-#define MapToEd Hacl_Curve25519_pub_to_Ed25519_pub
-#define MakeEdKeys Hacl_Ed25519_seed_to_pub_priv
-#define CalcCurve25519(pub, prv) Hacl_Curve25519_51_secret_to_public(pub, prv)
+#define MapToEd                    Hacl_Curve25519_pub_to_Ed25519_pub
+#define MakeEdKeys                 Hacl_Ed25519_seed_to_pub_priv
+#define CalcCurve25519(pub, prv)                                       \
+  Hacl_Curve25519_51_secret_to_public(pub, prv)
 #define MapToMont Hacl_Ed25519_pub_to_Curve25519_pub
 
 #endif
@@ -108,7 +109,8 @@ enum {
 
 #define SerLen sizeof(omemoSerializedKey)
 
-OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k, const omemoKey pub) {
+OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k,
+                                    const omemoKey pub) {
 #ifdef OMEMO2
   memcpy(k, pub, SerLen);
 #else
@@ -283,7 +285,8 @@ static uint8_t *FormatSerializedKey(uint8_t d[static 35], int id,
 }
 #endif
 
-static uint8_t *FormatKey(uint8_t d[static 34], int id, const omemoKey k) {
+static uint8_t *FormatKey(uint8_t d[static 34], int id,
+                          const omemoKey k) {
   assert(id < 16);
   *d++ = (id << 3) | PB_LEN;
   *d++ = 32;
@@ -294,10 +297,10 @@ static uint8_t *FormatKey(uint8_t d[static 34], int id, const omemoKey k) {
 // Format Protobuf PreKeyWhisperMessage without message (it should be
 // appended right after this call).
 // This is OMEMOKeyExchange in schema
-static size_t
-FormatPreKeyMessage(uint8_t d[static OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
-                    uint32_t pk_id, uint32_t spk_id, const omemoKey ik,
-                    const omemoKey ek, uint32_t msgsz) {
+static size_t FormatPreKeyMessage(
+    uint8_t d[static OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE],
+    uint32_t pk_id, uint32_t spk_id, const omemoKey ik,
+    const omemoKey ek, uint32_t msgsz) {
   uint8_t *p = d;
 #ifdef OMEMO2
   p = FormatVarInt(p, PB_UINT32, 1, pk_id);
@@ -345,7 +348,8 @@ FormatMessageHeader(uint8_t d[static OMEMO_INTERNAL_HEADER_MAXSIZE],
 /**
  * @returns OMEMO_ECORRUPT if the generated shared secret is not secure
  */
-static int DoX25519(omemoKey shared, const omemoKey prv, const omemoKey pub) {
+static int DoX25519(omemoKey shared, const omemoKey prv,
+                    const omemoKey pub) {
 #ifdef OMEMO_NOHACL
   c25519_smult(shared, pub, prv);
   // TODO: implement the same check
@@ -354,7 +358,8 @@ static int DoX25519(omemoKey shared, const omemoKey prv, const omemoKey pub) {
   omemoKey tmp, tmp2;
   memcpy(tmp, prv, 32);
   memcpy(tmp2, pub, 32);
-  return Hacl_Curve25519_51_ecdh(shared, tmp, tmp2) ? 0 : OMEMO_ECORRUPT;
+  return Hacl_Curve25519_51_ecdh(shared, tmp, tmp2) ? 0
+                                                    : OMEMO_ECORRUPT;
 #endif
 }
 
@@ -378,7 +383,7 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
                                    const uint8_t rnd[static 64],
                                    const uint8_t *msg, size_t msgn) {
   assert(msgn <= SerLen);
-  uint8_t msgbuf[SerLen+64];
+  uint8_t msgbuf[SerLen + 64];
   memcpy(msgbuf, msg, msgn);
   memcpy(msgbuf + msgn, rnd, 64);
   omemoKey ikprv, ikpub;
@@ -650,9 +655,9 @@ static int EncryptKeyImpl(struct omemoSession *session,
 }
 
 OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
-                    const struct omemoStore *store,
-                    struct omemoKeyMessage *msg,
-                    const omemoKeyPayload payload) {
+                                 const struct omemoStore *store,
+                                 struct omemoKeyMessage *msg,
+                                 const omemoKeyPayload payload) {
   int r;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
@@ -715,8 +720,8 @@ static int RatchetInitAlice(struct omemoState *state, const omemoKey sk,
 }
 
 OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
-                        const struct omemoStore *store,
-                        const struct omemoBundle *bundle) {
+                                     const struct omemoStore *store,
+                                     const struct omemoBundle *bundle) {
   omemoSerializedKey serspk;
   omemoSerializeKey(serspk, bundle->spk);
   if (!VerifySignature(bundle->spks, bundle->ik, serspk, SerLen)) {
@@ -1008,8 +1013,9 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
 }
 
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
-                    struct omemoStore *store, omemoKeyPayload payload,
-                    bool isprekey, const uint8_t *msg, size_t msgn) {
+                                 struct omemoStore *store,
+                                 omemoKeyPayload payload, bool isprekey,
+                                 const uint8_t *msg, size_t msgn) {
   if (!session || !store || !store->isinitialized || !msg || !msgn)
     return OMEMO_ESTATE;
   struct omemoState backup;
@@ -1027,8 +1033,8 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
 
 #ifdef OMEMO2
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
-                        const uint8_t *payload, size_t pn,
-                        const uint8_t *s, size_t n) {
+                                     const uint8_t *payload, size_t pn,
+                                     const uint8_t *s, size_t n) {
   if (pn != 48)
     return OMEMO_ECORRUPT;
   if (n < 16 || n % 16)
@@ -1051,9 +1057,9 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
   return 0;
 }
 #else
-OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t pn,
-                        const uint8_t iv[12], const uint8_t *s,
-                        size_t n) {
+OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
+                                     size_t pn, const uint8_t iv[12],
+                                     const uint8_t *s, size_t n) {
   int r = 0;
   if (pn < 32)
     return OMEMO_ECORRUPT;
@@ -1069,8 +1075,9 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload, size_t 
 #endif
 
 #ifdef OMEMO2
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload, uint8_t *s,
-                        size_t n) {
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
+                                     omemoKeyPayload payload,
+                                     uint8_t *s, size_t n) {
   uint8_t key[32];
   TRY(omemoRandom(key, 32));
   struct DeriveChainKeyOutput kdfout[1];
@@ -1086,8 +1093,10 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload, uint8_
   return 0;
 }
 #else
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, omemoKeyPayload payload,
-                        uint8_t iv[12], const uint8_t *s, size_t n) {
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
+                                     omemoKeyPayload payload,
+                                     uint8_t iv[12], const uint8_t *s,
+                                     size_t n) {
   int r = 0;
   if ((r = omemoRandom(payload, 16)) || (r = omemoRandom(iv, 12)))
     return r;
@@ -1115,7 +1124,8 @@ size_t omemoGetSerializedStoreSize(const struct omemoStore *store) {
   return sum;
 }
 
-OMEMO_EXPORT void omemoSerializeStore(uint8_t *p, const struct omemoStore *store) {
+OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
+                                      const struct omemoStore *store) {
   uint8_t *d = p;
   d = FormatVarInt(d, PB_UINT32, 1, store->isinitialized);
   d = FormatKey(d, 2, store->identity.prv);
@@ -1144,7 +1154,7 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p, const struct omemoStore *store
 }
 
 OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
-                          struct omemoStore *store) {
+                                       struct omemoStore *store) {
   assert(p && store);
   struct ProtobufField fields[] = {
       [1] = {PB_REQUIRED | PB_UINT32},
@@ -1178,8 +1188,7 @@ OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
   const char *e = p + n;
   int i = 0;
   while (i < OMEMO_NUMPREKEYS &&
-         !ParseRepeatingField(p, e, &fields[13], 13) &&
-         fields[13].p) {
+         !ParseRepeatingField(p, e, &fields[13], 13) && fields[13].p) {
     struct ProtobufField innerfields[] = {
         [1] = {PB_REQUIRED | PB_UINT32},
         [2] = {PB_REQUIRED | PB_LEN, 32},
@@ -1208,8 +1217,8 @@ omemoGetSerializedSessionSize(const struct omemoSession *session) {
          GetVarIntSize(session->fsm);
 }
 
-OMEMO_EXPORT void omemoSerializeSession(uint8_t *p,
-                           const struct omemoSession *session) {
+OMEMO_EXPORT void
+omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   uint8_t *d = p;
   d = FormatKey(d, 1, session->remoteidentity);
   d = FormatKey(d, 2, session->state.dhs.prv);
@@ -1229,7 +1238,7 @@ OMEMO_EXPORT void omemoSerializeSession(uint8_t *p,
 }
 
 OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
-                            struct omemoSession *session) {
+                                         struct omemoSession *session) {
   assert(p && n && session);
   struct ProtobufField fields[] = {
       [1] = {PB_REQUIRED | PB_LEN, 32},

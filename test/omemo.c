@@ -23,11 +23,7 @@
 
 #include <sys/random.h>
 
-#ifdef OMEMO2
-#include "o/store2.inc"
-#else
 #include "o/store.inc"
-#endif
 
 // TODO: for all exposed functions, test all error paths
 
@@ -109,6 +105,29 @@ static void TestFormatProtobuf() {
   assert(GetVarIntSize(10) == 1);
   assert(GetVarIntSize(0x80) == 2);
   assert(GetVarIntSize(UINT32_MAX) == 5);
+}
+
+static void TestFormattings() {
+  uint8_t buf[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE+OMEMO_INTERNAL_ENCRYPTED_MAXSIZE];
+  omemoKey k = {0};
+  assert(FormatPreKeyMessage(buf, UINT32_MAX, UINT32_MAX, k, k, OMEMO_INTERNAL_ENCRYPTED_MAXSIZE) == OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE);
+  assert(FormatMessageHeader(buf, UINT32_MAX, UINT32_MAX, k) == OMEMO_INTERNAL_HEADER_MAXSIZE);
+}
+
+static void TestEncryptSize() {
+  struct omemoStore store;
+  assert(!omemoDeserializeStore(store_inc, store_inc_len, &store));
+  // TODO: fill all keys with random values??
+  struct omemoSession session = {0};
+  session.fsm = SESSION_INIT;
+  session.state.ns = UINT32_MAX;
+  session.state.pn = UINT32_MAX;
+  session.pendingpk_id = UINT32_MAX;
+  session.pendingspk_id = UINT32_MAX;
+  struct omemoKeyMessage msg;
+  omemoKeyPayload payload;
+  assert(!EncryptKeyImpl(&session, &store, &msg, payload));
+  assert(msg.n == sizeof(msg.p));
 }
 
 static void TestKeyPair(struct omemoKeyPair *kp, const char *rnd, const char *prv, const char *pub) {
@@ -562,11 +581,7 @@ static void TestSessionIntegration() {
   memset(&session, 0, sizeof(session));
   uint8_t buf[1000];
   omemoDeserializeStore(store_inc, store_inc_len, &store);
-#ifdef OMEMO2
-  FILE *f = fopen("o/msg2.bin", "r");
-#else
   FILE *f = fopen("o/msg.bin", "r");
-#endif
   assert(f);
   int n = fread(buf, 1, 1000, f);
   assert(n > 0);
@@ -588,11 +603,7 @@ static void TestSessionIntegration() {
   memset(payload, 0xcc, sizeof(payload));
   struct omemoKeyMessage msg;
   assert(!omemoEncryptKey(&session, &store, &msg, payload));
-#ifdef OMEMO2
-  f = fopen("o/resp2.bin", "w");
-#else
   f = fopen("o/resp.bin", "w");
-#endif
   assert(f);
   assert(fwrite(msg.p, 1, msg.n, f) == msg.n);
   fclose(f);
@@ -611,6 +622,8 @@ int main() {
   // edsign_sign_modified and edsign_verify.
   RunTest(TestParseProtobuf);
   RunTest(TestFormatProtobuf);
+  RunTest(TestFormattings);
+  RunTest(TestEncryptSize);
   RunTest(TestProtobufPrekey);
   RunTest(TestCurve25519);
   RunTest(TestRotate);

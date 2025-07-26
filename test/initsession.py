@@ -8,13 +8,9 @@ from twomemo import twomemo
 import omemo
 from omemo.storage import Maybe, JSONType, Nothing
 
-OMEMO2=os.getenv("OMEMO2") is not None
+import bundle
 
-if OMEMO2:
-    import bundle2
-else:
-    import bundle
-
+OMEMO2=len(bundle.ik) == 32
 
 class StorageImpl(omemo.storage.Storage):
     def __init__(self) -> None:
@@ -59,23 +55,23 @@ async def run_oldmemo():
         f.write(ser)
 
 async def run_twomemo():
-    pks = { v:k for k, v in bundle2.pks.items()}
+    pks = { v:k for k, v in bundle.pks.items()}
     b=twomemo.BundleImpl(
         "admin@localhost",7,
         x3dh.Bundle(
-            bundle2.ik,
-            bundle2.spk,
-            bundle2.spks,
+            bundle.ik,
+            bundle.spk,
+            bundle.spks,
             {pk for pk in pks.keys()}
             ),
-        bundle2.spk_id,
+        bundle.spk_id,
         pks,
     )
     o=twomemo.Twomemo(StorageImpl())
     k=twomemo.PlainKeyMaterialImpl(b"\x55"*32,b"\xaa"*16)
     ses, msg = await o.build_session_active("user@localhost", 8, b, k)
     ser=ses.key_exchange.serialize(msg.serialize())
-    with open("o/msg2.bin", "wb") as f:
+    with open("o/msg.bin", "wb") as f:
         f.write(ser)
 
 async def main():
