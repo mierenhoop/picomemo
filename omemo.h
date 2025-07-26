@@ -32,11 +32,10 @@
 #define OMEMO_EPROTOBUF (-1)
 #define OMEMO_ECRYPTO   (-2)
 #define OMEMO_ECORRUPT  (-3)
-#define OMEMO_ESIG      (-4)
+#define OMEMO_EPARAM    (-4)
 #define OMEMO_ESTATE    (-5)
 #define OMEMO_EKEYGONE  (-6)
 #define OMEMO_EUSER     (-7)
-#define OMEMO_EPARAM    (-8)
 
 #ifdef OMEMO2
 
@@ -124,8 +123,8 @@ struct omemoSession {
   int init;
   omemoKey remoteidentity;
   struct omemoState state;
-  omemoKey pendingek;
-  uint32_t pendingpk_id, pendingspk_id;
+  omemoKey usedek;
+  uint32_t usedpk_id, usedspk_id;
 };
 
 struct omemoBundle {
@@ -233,6 +232,14 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
                                  const omemoKeyPayload payload);
 /**
  * Decrypt message encryption key payload for a specific recipient.
+ *
+ * If a prekey is used, it will be stored in session->usedpk_id, which
+ * should be removed from the store and bundle after catching up with
+ * all other messages. Remove by iterating over store->prekeys and
+ * zeroing the omemoPreKey structure where id == store->usedpk_id.
+ *
+ * If session->state.nr >= 53 you should send an empty message back to
+ * advance the ratchet.
  */
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  struct omemoStore *store,

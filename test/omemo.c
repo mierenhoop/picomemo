@@ -122,8 +122,8 @@ static void TestEncryptSize() {
   session.init = SESSION_INIT;
   session.state.ns = UINT32_MAX;
   session.state.pn = UINT32_MAX;
-  session.pendingpk_id = UINT32_MAX;
-  session.pendingspk_id = UINT32_MAX;
+  session.usedpk_id = UINT32_MAX;
+  session.usedspk_id = UINT32_MAX;
   struct omemoKeyMessage msg;
   omemoKeyPayload payload;
   assert(!EncryptKeyImpl(&session, &store, &msg, payload));
@@ -438,7 +438,7 @@ static void TestDeriveChainKey() {
             0x6e, 0xc1, 0x03, 0x42, 0xa2, 0x46, 0xd1, 0x5d};
 
   omemoKey myck, mymk;
-  assert(!GetBaseMaterials(myck, mymk, seed));
+  GetBaseMaterials(myck, mymk, seed);
   assert(!memcmp(ck, myck, 32));
   struct DeriveChainKeyOutput kdfout[1];
   assert(!DeriveKey(Zero32, mymk, HkdfInfoMessageKeys, kdfout));

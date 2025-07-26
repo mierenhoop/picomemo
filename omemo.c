@@ -425,7 +425,6 @@ static bool VerifySignature(const omemoCurveSignature sig,
 }
 
 static int GenerateKeyPair(struct omemoKeyPair *kp) {
-  memset(kp, 0, sizeof(*kp));
   TRY(omemoRandom(kp->prv, sizeof(kp->prv)));
   kp->prv[0] &= 0xf8;
   kp->prv[31] &= 0x7f;
@@ -436,7 +435,6 @@ static int GenerateKeyPair(struct omemoKeyPair *kp) {
 
 #ifdef OMEMO2
 static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
-  memset(kp, 0, sizeof(*kp));
   omemoKey seed;
   TRY(omemoRandom(seed, 32));
   MakeEdKeys(kp->pub, kp->prv, seed);
@@ -539,7 +537,9 @@ static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
   // is needlessly large.
   if (msgn > OMEMO_INTERNAL_FULLMSG_MAXSIZE)
     return OMEMO_ECORRUPT;
-  uint8_t macinput[ADSIZE + OMEMO_INTERNAL_FULLMSG_MAXSIZE], mac[32];
+  // Adding 4 in case some client has a large registration id
+  uint8_t macinput[ADSIZE + OMEMO_INTERNAL_FULLMSG_MAXSIZE + 4],
+      mac[32];
   GetAd(macinput, ika, ikb);
   memcpy(macinput + ADSIZE, msg, msgn);
   Hmac(mk, macinput, ADSIZE + msgn, mac);
@@ -559,25 +559,13 @@ static void AesCbc(int mode, uint8_t key[static 32], size_t n,
   assert(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
 }
 
-#define DecAesCbc(key, n, iv, s, d)                                    \
-  AesCbc(MBEDTLS_AES_DECRYPT, key, n, iv, s, d)
-#define EncAesCbc(key, n, iv, s, d)                                    \
-  AesCbc(MBEDTLS_AES_ENCRYPT, key, n, iv, s, d)
-
-static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
-                   const omemoKeyPayload in, omemoKey key,
-                   uint8_t iv[static 16]) {
+static void Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
+                    const omemoKeyPayload in, omemoKey key,
+                    uint8_t iv[static 16]) {
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
   memcpy(tmp, in, OMEMO_INTERNAL_PAYLOAD_SIZE);
   memset(tmp + OMEMO_INTERNAL_PAYLOAD_SIZE, 0x10, 0x10);
-  EncAesCbc(key, sizeof(tmp), iv, tmp, out);
-  return 0;
-}
-
-static int Decrypt(uint8_t *out, const uint8_t *in, size_t n,
-                   omemoKey key, uint8_t iv[static 16]) {
-  DecAesCbc(key, n, iv, in, out);
-  return 0;
+  AesCbc(MBEDTLS_AES_ENCRYPT, key, sizeof(tmp), iv, tmp, out);
 }
 
 static const uint8_t Zero32[32];
@@ -596,13 +584,12 @@ struct __attribute__((__packed__)) DeriveChainKeyOutput {
 
 // d may be the same pointer as ck
 //  ck, mk = KDF_CK(ck)
-static int GetBaseMaterials(omemoKey d, omemoKey mk,
+static void GetBaseMaterials(omemoKey d, omemoKey mk,
                             const omemoKey ck) {
   uint8_t data[1] = {1};
   Hmac(ck, data, 1, mk);
   data[0] = 2;
   Hmac(ck, data, 1, d);
-  return 0;
 }
 
 // CKs, mk = KDF_CK(CKs)
@@ -613,10 +600,10 @@ static int EncryptKeyImpl(struct omemoSession *session,
                           const struct omemoStore *store,
                           struct omemoKeyMessage *msg,
                           const omemoKeyPayload payload) {
-  if (session->init != SESSION_INIT && session->init != SESSION_READY)
+  if (!session->init)
     return OMEMO_ESTATE;
   omemoKey mk;
-  TRY(GetBaseMaterials(session->state.cks, mk, session->state.cks));
+  GetBaseMaterials(session->state.cks, mk, session->state.cks);
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   msg->n = 0;
@@ -631,7 +618,7 @@ static int EncryptKeyImpl(struct omemoSession *session,
   msg->n +=
       FormatMessageHeader(msg->p + msg->n, session->state.ns,
                           session->state.pn, session->state.dhs.pub);
-  TRY(Encrypt(msg->p + msg->n, payload, kdfout->cipher, kdfout->iv));
+  Encrypt(msg->p + msg->n, payload, kdfout->cipher, kdfout->iv);
   msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
 #ifdef OMEMO2
   msg->p[19] = msg->n - 20;
@@ -650,8 +637,8 @@ static int EncryptKeyImpl(struct omemoSession *session,
     memmove(msg->p + OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE, msg->p,
             msg->n);
     int headersz = FormatPreKeyMessage(
-        msg->p, session->pendingpk_id, session->pendingspk_id,
-        store->identity.pub, session->pendingek, msg->n);
+        msg->p, session->usedpk_id, session->usedspk_id,
+        store->identity.pub, session->usedek, msg->n);
     memmove(msg->p + headersz,
             msg->p + OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE, msg->n);
     msg->n += headersz;
@@ -734,12 +721,10 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   omemoSerializedKey serspk;
   omemoSerializeKey(serspk, bundle->spk);
   if (!VerifySignature(bundle->spks, bundle->ik, serspk, SerLen)) {
-    return OMEMO_ESIG;
+    return OMEMO_ECORRUPT;
   }
   struct omemoKeyPair eka;
   TRY(GenerateKeyPair(&eka));
-  memset(&session->state, 0, sizeof(struct omemoState));
-  memcpy(session->remoteidentity, bundle->ik, 32);
   omemoKey sk;
 #ifdef OMEMO2
   omemoKey ik, edy;
@@ -752,10 +737,15 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       bundle->ik, bundle->spk, bundle->pk));
 #endif
-  TRY(RatchetInitAlice(&session->state, sk, bundle->spk, &eka));
-  memcpy(session->pendingek, eka.pub, 32);
-  session->pendingpk_id = bundle->pk_id;
-  session->pendingspk_id = bundle->spk_id;
+  int r = RatchetInitAlice(&session->state, sk, bundle->spk, &eka);
+  if (r) {
+    memset(&session->state, 0, sizeof(struct omemoState));
+    return r;
+  }
+  memcpy(session->usedek, eka.pub, 32);
+  memcpy(session->remoteidentity, bundle->ik, 32);
+  session->usedpk_id = bundle->pk_id;
+  session->usedspk_id = bundle->spk_id;
   session->init = SESSION_INIT;
   return 0;
 }
@@ -829,7 +819,7 @@ static int SkipMessageKeys(struct omemoSession *session, uint32_t n,
                            uint64_t fullamount) {
   struct omemoMessageKey k;
   while (session->state.nr < n) {
-    TRY(GetBaseMaterials(session->state.ckr, k.mk, session->state.ckr));
+    GetBaseMaterials(session->state.ckr, k.mk, session->state.ckr);
     memcpy(k.dh, session->state.dhr, 32);
     k.nr = session->state.nr;
     TRY(omemoStoreMessageKey(session, &k, fullamount--));
@@ -877,8 +867,9 @@ static int DecryptKeyImpl(struct omemoSession *session,
   if (fields[PbMsg_ciphertext].v != 64)
     return OMEMO_ECORRUPT;
 #else
-  if (fields[PbMsg_ciphertext].v > 48 ||
-      fields[PbMsg_ciphertext].v < 32)
+  // Some clients send a 32 byte key...
+  if (fields[PbMsg_ciphertext].v != 48 &&
+      fields[PbMsg_ciphertext].v != 32)
     return OMEMO_ECORRUPT;
 #endif
 
@@ -917,7 +908,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
       TRY(DHRatchet(&session->state, headerdh));
     }
     TRY(SkipMessageKeys(session, headern, nskips));
-    TRY(GetBaseMaterials(session->state.ckr, mk, session->state.ckr));
+    GetBaseMaterials(session->state.ckr, mk, session->state.ckr);
     session->state.nr++;
   }
   struct DeriveChainKeyOutput kdfout[1];
@@ -933,8 +924,9 @@ static int DecryptKeyImpl(struct omemoSession *session,
   if (memcmp(mac, realmac, MACSIZE))
     return OMEMO_ECORRUPT;
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
-  TRY(Decrypt(tmp, fields[PbMsg_ciphertext].p,
-              fields[PbMsg_ciphertext].v, kdfout->cipher, kdfout->iv));
+  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher,
+         fields[PbMsg_ciphertext].v, kdfout->iv,
+         fields[PbMsg_ciphertext].p, tmp);
   memcpy(decrypted, tmp, sizeof(omemoKeyPayload));
   session->init = SESSION_READY;
   return 0;
@@ -946,6 +938,9 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
                                  const uint8_t *msg, size_t msgn) {
   struct omemoPreKey *pk = NULL;
   if (isprekey) {
+    // Can't receive prekey when we sent a prekey...
+    if (session->init == SESSION_INIT)
+      return OMEMO_ESTATE;
 #ifdef OMEMO2
     // OMEMOKeyExchange
     struct ProtobufField fields[6] = {
@@ -972,14 +967,13 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
     if (ParseProtobuf(msg + 1, msgn - 1, fields, 7))
       return OMEMO_EPROTOBUF;
 #endif
-    // nr will only ever be 0 with the first prekey message
-    if (session->state.nr == 0) {
-      // TODO: later remove this prekey
+    if (session->init == SESSION_UNINIT) {
       pk = FindPreKey(store, fields[PbKeyEx_pk_id].v);
       const struct omemoSignedPreKey *spk =
           FindSignedPreKey(store, fields[PbKeyEx_spk_id].v);
       if (!pk || !spk)
         return OMEMO_ECORRUPT;
+      session->usedpk_id = fields[PbKeyEx_pk_id].v;
       omemoKey sk;
       memcpy(session->remoteidentity, GetRawKey(fields[PbKeyEx_ik].p),
              32);
@@ -1001,24 +995,15 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
     }
     msg = fields[PbKeyEx_message].p;
     msgn = fields[PbKeyEx_message].v;
-  } else if (!session->init) {
+  } else if (session->init == SESSION_INIT) {
+    // We don't need these anymore
+    session->usedpk_id = 0;
+    session->usedspk_id = 0;
+    memset(session->usedek, 0, 32);
+  } else if (session->init == SESSION_UNINIT){
     return OMEMO_ESTATE;
   }
-  session->init = SESSION_READY;
-  int r = DecryptKeyImpl(session, store, payload, msg, msgn);
-  if (!r && pk) {
-    // TODO: should we remove the key here or let the user do it? We
-    // could do something like `if (pk) session->usedprekey = pk->id`
-    // and have a function which removes & refills that key. When
-    // updating the key the user probably wants to upload the new bundle
-    // (or just the new key), for now that should only be done when this
-    // function returns 0 and isprekey == true. It might be more user
-    // friendly to have separate function for both decrypting prekey and
-    // non-prekey where that get done automatically.
-    memset(pk, 0, sizeof(*pk));
-    return omemoRefillPreKeys(store);
-  }
-  return r;
+  return DecryptKeyImpl(session, store, payload, msg, msgn);
 }
 
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
@@ -1058,7 +1043,7 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
   Hmac(kdfout->mac, s, n, mac);
   if (memcmp(mac, payload + 32, 16))
     return OMEMO_ECORRUPT;
-  DecAesCbc(kdfout->cipher, n, kdfout->iv, s, d);
+  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, n, kdfout->iv, s, d);
 
   uint8_t p = d[n - 1];
   if (p > n)
@@ -1100,7 +1085,8 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
   // PKCS#7
   size_t extend = omemoGetMessagePadSize(n);
   memset(s + n, extend, extend);
-  EncAesCbc(kdfout->cipher, n + extend, kdfout->iv, s, d);
+  AesCbc(MBEDTLS_AES_ENCRYPT, kdfout->cipher, n + extend, kdfout->iv, s,
+         d);
   uint8_t mac[32];
   Hmac(kdfout->mac, d, n + extend, mac);
   memcpy(payload, key, 32);
@@ -1234,8 +1220,8 @@ omemoGetSerializedSessionSize(const struct omemoSession *session) {
          + 1 * 6 + GetVarIntSize(session->state.ns) +
          GetVarIntSize(session->state.nr) +
          GetVarIntSize(session->state.pn) +
-         GetVarIntSize(session->pendingpk_id) +
-         GetVarIntSize(session->pendingspk_id) +
+         GetVarIntSize(session->usedpk_id) +
+         GetVarIntSize(session->usedspk_id) +
          GetVarIntSize(session->init);
 }
 
@@ -1254,9 +1240,10 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   d = FormatVarInt(d, PB_UINT32, 8, session->state.ns);
   d = FormatVarInt(d, PB_UINT32, 9, session->state.nr);
   d = FormatVarInt(d, PB_UINT32, 10, session->state.pn);
-  d = FormatKey(d, 11, session->pendingek);
-  d = FormatVarInt(d, PB_UINT32, 12, session->pendingpk_id);
-  d = FormatVarInt(d, PB_UINT32, 13, session->pendingspk_id);
+  // TODO: don't have to include used* first ratchet
+  d = FormatKey(d, 11, session->usedek);
+  d = FormatVarInt(d, PB_UINT32, 12, session->usedpk_id);
+  d = FormatVarInt(d, PB_UINT32, 13, session->usedspk_id);
   d = FormatVarInt(d, PB_UINT32, 14, session->init);
   assert(d - p == omemoGetSerializedSessionSize(session));
 }
@@ -1293,9 +1280,9 @@ OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
   session->state.ns = fields[8].v;
   session->state.nr = fields[9].v;
   session->state.pn = fields[10].v;
-  memcpy(session->pendingek, fields[11].p, 32);
-  session->pendingpk_id = fields[12].v;
-  session->pendingspk_id = fields[13].v;
+  memcpy(session->usedek, fields[11].p, 32);
+  session->usedpk_id = fields[12].v;
+  session->usedspk_id = fields[13].v;
   session->init = fields[14].v;
   return 0;
 }
