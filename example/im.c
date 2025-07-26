@@ -85,7 +85,7 @@ static bool HasConnection() {
 }
 
 static void CloseOmemo() {
-  if (omemoIsSessionInitialized(&omemosession)) {
+  if (omemosession.init) {
     memset(&omemosession, 0, sizeof(omemosession));
   }
 }
@@ -194,7 +194,7 @@ static void GivePassword() {
 }
 
 static void PrintPrompt() {
-  printf(omemoIsSessionInitialized(&omemosession) && remoteid ? "🔒> " : "> ");
+  printf(omemosession.init && remoteid ? "🔒> " : "> ");
   fflush(stdout);
 }
 
@@ -759,7 +759,7 @@ static void HandleCommand() {
       xmppFormatStanza(&client, "<iq to='%s' id='%s' type='set'><ping xmlns='urn:xmpp:ping'/></iq>", jid, "ping1");
     }
   } else if (!strcmp("/omemo", cmd)) {
-    if (!omemoIsSessionInitialized(&omemosession))
+    if (!omemosession.init)
       SubscribeDeviceList(&remotejid, PENDING_REMOTEDEVICELIST);
   } else if (!strcmp("/plain", cmd)) {
     CloseOmemo();
@@ -767,7 +767,7 @@ static void HandleCommand() {
     puts("Command not found");
   } else if (strlen(cmd)) {
     if (HasConnection()) {
-      if (omemoIsSessionInitialized(&omemosession)) {
+      if (omemosession.init) {
         if (remoteid)
           SendNormalOmemo(cmd);
         else // TODO: save remote id persistantly
@@ -802,7 +802,7 @@ void RunIm(const char *ip) {
   deviceid = 1024;
   xmppParseJid(&remotejid, remotejidp, sizeof(remotejidp), "user@localhost");
   LoadStore();
-  assert(omemostore.isinitialized);
+  assert(omemostore.init);
   memset(&omemosession, 0, sizeof(omemosession));
   //LoadSession();
   Loop();

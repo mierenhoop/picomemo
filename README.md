@@ -51,7 +51,8 @@ support for Lua 5.1 up to at least Lua 5.4.
 
 - C compiler (gcc)
 
-- docker-compose (for testing)
+- For testing & development: GNU Make, docker-compose, Python, openssl,
+  rlwrap, socat, xxd, POSIX commands, ctags-exuberant
 
 - Lua 5.1-5.4 (for Lua bindings)
 
@@ -67,7 +68,7 @@ Copy over the source files, `omemo.c/h` are mandatory and you have to
 choose either `c25519.c/h` or `hacl.c/h`.
 
 You must link against libmbedcrypto (and/or configure your mbedtls build
-to only include the required functions.
+to only include the required functions).
 
 ### API
 
@@ -95,6 +96,8 @@ class XmppClient {
         if storebin {
 >           omemoDeserializeStore(storebin, len(storebin), &store)
         } else {
+            // Most calls return an integer, which maps to a OMEMO_E*
+            // error code (error handling is not done in this example)
 >           omemoSetupStore(&store)
             file = OpenFile("store.bin")
 >           file.buffer_size = omemoGetSerializedStoreSize(&store)

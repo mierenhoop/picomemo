@@ -15,10 +15,10 @@ $(STORES): lomemo.so
 	done
 
 lomemo.so: lomemo.c ../omemo.c ../hacl.c
-	cc -shared -o $@ $^ $(CFLAGS) -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
+	$(CC) -shared -o $@ $^ $(CFLAGS) -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
 
 lomemo2.so: lomemo.c ../omemo.c ../hacl.c
-	cc -shared -o $@ $^ $(CFLAGS) -DOMEMO2 -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
+	$(CC) -shared -o $@ $^ $(CFLAGS) -DOMEMO2 -fPIC -I .. -I /usr/include/$(LUA) -l$(LUA) -lmbedcrypto
 
 .PHONY: clean
 clean:

@@ -119,7 +119,6 @@ OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k,
 #endif
 }
 
-// Actually returns omemoKey
 static inline const uint8_t *GetRawKey(const omemoSerializedKey k) {
 #ifdef OMEMO2
   return k;
@@ -470,6 +469,8 @@ static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
 }
 
 OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store) {
+  if (!store)
+    return OMEMO_EPARAM;
   int i;
   for (i = 0; i < OMEMO_NUMPREKEYS; i++) {
     if (!store->prekeys[i].id) {
@@ -484,6 +485,8 @@ OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store) {
 }
 
 static int omemoSetupStoreImpl(struct omemoStore *store) {
+  if (!store)
+    return OMEMO_EPARAM;
   memset(store, 0, sizeof(struct omemoStore));
 #ifdef OMEMO2
   TRY(GenerateEdKeyPair(&store->identity));
@@ -493,11 +496,13 @@ static int omemoSetupStoreImpl(struct omemoStore *store) {
   TRY(GenerateSignedPreKey(&store->cursignedprekey, 1,
                            &store->identity));
   TRY(omemoRefillPreKeys(store));
-  store->isinitialized = true;
+  store->init = true;
   return 0;
 }
 
 OMEMO_EXPORT int omemoSetupStore(struct omemoStore *store) {
+  if (!store)
+    return OMEMO_EPARAM;
   int r;
   if ((r = omemoSetupStoreImpl(store)))
     memset(store, 0, sizeof(struct omemoStore));
@@ -608,7 +613,7 @@ static int EncryptKeyImpl(struct omemoSession *session,
                           const struct omemoStore *store,
                           struct omemoKeyMessage *msg,
                           const omemoKeyPayload payload) {
-  if (session->fsm != SESSION_INIT && session->fsm != SESSION_READY)
+  if (session->init != SESSION_INIT && session->init != SESSION_READY)
     return OMEMO_ESTATE;
   omemoKey mk;
   TRY(GetBaseMaterials(session->state.cks, mk, session->state.cks));
@@ -638,7 +643,7 @@ static int EncryptKeyImpl(struct omemoSession *session,
   msg->n += 8;
 #endif
   session->state.ns++;
-  if (session->fsm == SESSION_INIT) {
+  if (session->init == SESSION_INIT) {
     msg->isprekey = true;
     // [message 00...] -> [00... message] -> [header 00... message] ->
     // [header message]
@@ -658,6 +663,8 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
                                  const struct omemoStore *store,
                                  struct omemoKeyMessage *msg,
                                  const omemoKeyPayload payload) {
+  if (!session || !store || !msg || !payload)
+    return OMEMO_EPARAM;
   int r;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
@@ -722,6 +729,8 @@ static int RatchetInitAlice(struct omemoState *state, const omemoKey sk,
 OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
                                      const struct omemoStore *store,
                                      const struct omemoBundle *bundle) {
+  if (!session || !store || !bundle)
+    return OMEMO_EPARAM;
   omemoSerializedKey serspk;
   omemoSerializeKey(serspk, bundle->spk);
   if (!VerifySignature(bundle->spks, bundle->ik, serspk, SerLen)) {
@@ -747,7 +756,7 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
   memcpy(session->pendingek, eka.pub, 32);
   session->pendingpk_id = bundle->pk_id;
   session->pendingspk_id = bundle->spk_id;
-  session->fsm = SESSION_INIT;
+  session->init = SESSION_INIT;
   return 0;
 }
 
@@ -772,6 +781,8 @@ FindSignedPreKey(const struct omemoStore *store, uint32_t spk_id) {
 }
 
 OMEMO_EXPORT int omemoRotateSignedPreKey(struct omemoStore *store) {
+  if (!store)
+    return OMEMO_EPARAM;
   struct omemoSignedPreKey spk;
   int r = GenerateSignedPreKey(
       &spk, IncrementWrapSkipZero(store->cursignedprekey.id),
@@ -925,7 +936,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
   TRY(Decrypt(tmp, fields[PbMsg_ciphertext].p,
               fields[PbMsg_ciphertext].v, kdfout->cipher, kdfout->iv));
   memcpy(decrypted, tmp, sizeof(omemoKeyPayload));
-  session->fsm = SESSION_READY;
+  session->init = SESSION_READY;
   return 0;
 }
 
@@ -962,7 +973,6 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
       return OMEMO_EPROTOBUF;
 #endif
     // nr will only ever be 0 with the first prekey message
-    // we could put this in session->fsm...
     if (session->state.nr == 0) {
       // TODO: later remove this prekey
       pk = FindPreKey(store, fields[PbKeyEx_pk_id].v);
@@ -991,11 +1001,10 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
     }
     msg = fields[PbKeyEx_message].p;
     msgn = fields[PbKeyEx_message].v;
-  } else {
-    if (!session->fsm) // TODO: specify which states are allowed here
-      return OMEMO_ESTATE;
+  } else if (!session->init) {
+    return OMEMO_ESTATE;
   }
-  session->fsm = SESSION_READY;
+  session->init = SESSION_READY;
   int r = DecryptKeyImpl(session, store, payload, msg, msgn);
   if (!r && pk) {
     // TODO: should we remove the key here or let the user do it? We
@@ -1016,8 +1025,8 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  struct omemoStore *store,
                                  omemoKeyPayload payload, bool isprekey,
                                  const uint8_t *msg, size_t msgn) {
-  if (!session || !store || !store->isinitialized || !msg || !msgn)
-    return OMEMO_ESTATE;
+  if (!session || !store || !payload || !store->init || !msg)
+    return OMEMO_EPARAM;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
   int r;
@@ -1035,6 +1044,8 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
                                      const uint8_t *payload, size_t pn,
                                      const uint8_t *s, size_t n) {
+  if (!d || !olen || !payload || !s)
+    return OMEMO_EPARAM;
   if (pn != 48)
     return OMEMO_ECORRUPT;
   if (n < 16 || n % 16)
@@ -1046,7 +1057,7 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
   uint8_t mac[32];
   Hmac(kdfout->mac, s, n, mac);
   if (memcmp(mac, payload + 32, 16))
-    return OMEMO_ESIG; // TODO: have new error code for this?
+    return OMEMO_ECORRUPT;
   DecAesCbc(kdfout->cipher, n, kdfout->iv, s, d);
 
   uint8_t p = d[n - 1];
@@ -1060,6 +1071,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
                                      size_t pn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n) {
+  if (!d || !payload || !iv || !s)
+    return OMEMO_EPARAM;
   int r = 0;
   if (pn < 32)
     return OMEMO_ECORRUPT;
@@ -1078,6 +1091,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
                                      omemoKeyPayload payload,
                                      uint8_t *s, size_t n) {
+  if (!d || !payload || !s)
+    return OMEMO_EPARAM;
   uint8_t key[32];
   TRY(omemoRandom(key, 32));
   struct DeriveChainKeyOutput kdfout[1];
@@ -1097,6 +1112,8 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
                                      omemoKeyPayload payload,
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n) {
+  if (!d || !payload || !iv || !s)
+    return OMEMO_EPARAM;
   int r = 0;
   if ((r = omemoRandom(payload, 16)) || (r = omemoRandom(iv, 12)))
     return r;
@@ -1114,8 +1131,10 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
 /************************** SERIALIZATION ****************************/
 
 size_t omemoGetSerializedStoreSize(const struct omemoStore *store) {
+  if (!store)
+    return 0;
   size_t sum = 34 * 6 + (2 + 64) * 2 + 1 * 4 +
-               GetVarIntSize(store->isinitialized) +
+               GetVarIntSize(store->init) +
                GetVarIntSize(store->cursignedprekey.id) +
                GetVarIntSize(store->prevsignedprekey.id) +
                GetVarIntSize(store->pkcounter);
@@ -1126,8 +1145,10 @@ size_t omemoGetSerializedStoreSize(const struct omemoStore *store) {
 
 OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
                                       const struct omemoStore *store) {
+  if (!p || !store)
+    return;
   uint8_t *d = p;
-  d = FormatVarInt(d, PB_UINT32, 1, store->isinitialized);
+  d = FormatVarInt(d, PB_UINT32, 1, store->init);
   d = FormatKey(d, 2, store->identity.prv);
   d = FormatKey(d, 3, store->identity.pub);
   d = FormatVarInt(d, PB_UINT32, 4, store->cursignedprekey.id);
@@ -1135,7 +1156,6 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
   d = FormatKey(d, 6, store->cursignedprekey.kp.pub);
   d = FormatVarInt(d, PB_LEN, 7, 64);
   d = (memcpy(d, store->cursignedprekey.sig, 64), d + 64);
-  // TODO: when id = 0 we don't have to include it here
   d = FormatVarInt(d, PB_UINT32, 8, store->prevsignedprekey.id);
   d = FormatKey(d, 9, store->prevsignedprekey.kp.prv);
   d = FormatKey(d, 10, store->prevsignedprekey.kp.pub);
@@ -1144,7 +1164,6 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
   d = FormatVarInt(d, PB_UINT32, 12, store->pkcounter);
   for (int i = 0; i < OMEMO_NUMPREKEYS; i++) {
     const struct omemoPreKey *pk = store->prekeys + i;
-    // TODO: only add when prekey.id != 0
     d = FormatVarInt(d, PB_LEN, 13, 1 + GetVarIntSize(pk->id) + 2 * 34);
     d = FormatVarInt(d, PB_UINT32, 1, pk->id);
     d = FormatKey(d, 2, pk->kp.prv);
@@ -1155,7 +1174,8 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
 
 OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
                                        struct omemoStore *store) {
-  assert(p && store);
+  if (!p || !store)
+    return OMEMO_EPARAM;
   struct ProtobufField fields[] = {
       [1] = {PB_REQUIRED | PB_UINT32},
       [2] = {PB_REQUIRED | PB_LEN, 32},
@@ -1173,7 +1193,7 @@ OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
   };
   if (ParseProtobuf(p, n, fields, 14))
     return OMEMO_EPROTOBUF;
-  store->isinitialized = fields[1].v;
+  store->init = fields[1].v;
   memcpy(store->identity.prv, fields[2].p, 32);
   memcpy(store->identity.pub, fields[3].p, 32);
   store->cursignedprekey.id = fields[4].v;
@@ -1208,17 +1228,21 @@ OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
 
 size_t
 omemoGetSerializedSessionSize(const struct omemoSession *session) {
+  if (!session)
+    return 0;
   return 34 * 8 // Key
          + 1 * 6 + GetVarIntSize(session->state.ns) +
          GetVarIntSize(session->state.nr) +
          GetVarIntSize(session->state.pn) +
          GetVarIntSize(session->pendingpk_id) +
          GetVarIntSize(session->pendingspk_id) +
-         GetVarIntSize(session->fsm);
+         GetVarIntSize(session->init);
 }
 
 OMEMO_EXPORT void
 omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
+  if (!p || !session)
+    return;
   uint8_t *d = p;
   d = FormatKey(d, 1, session->remoteidentity);
   d = FormatKey(d, 2, session->state.dhs.prv);
@@ -1233,13 +1257,14 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   d = FormatKey(d, 11, session->pendingek);
   d = FormatVarInt(d, PB_UINT32, 12, session->pendingpk_id);
   d = FormatVarInt(d, PB_UINT32, 13, session->pendingspk_id);
-  d = FormatVarInt(d, PB_UINT32, 14, session->fsm);
+  d = FormatVarInt(d, PB_UINT32, 14, session->init);
   assert(d - p == omemoGetSerializedSessionSize(session));
 }
 
 OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
                                          struct omemoSession *session) {
-  assert(p && n && session);
+  if (!p || !session)
+    return OMEMO_EPARAM;
   struct ProtobufField fields[] = {
       [1] = {PB_REQUIRED | PB_LEN, 32},
       [2] = {PB_REQUIRED | PB_LEN, 32},
@@ -1271,6 +1296,6 @@ OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
   memcpy(session->pendingek, fields[11].p, 32);
   session->pendingpk_id = fields[12].v;
   session->pendingspk_id = fields[13].v;
-  session->fsm = fields[14].v;
+  session->init = fields[14].v;
   return 0;
 }

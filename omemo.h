@@ -36,6 +36,7 @@
 #define OMEMO_ESTATE    (-5)
 #define OMEMO_EKEYGONE  (-6)
 #define OMEMO_EUSER     (-7)
+#define OMEMO_EPARAM    (-8)
 
 #ifdef OMEMO2
 
@@ -112,7 +113,7 @@ struct omemoKeyMessage {
 // is always >= 1; pkcounter is the id of the most recently generated
 // prekey.
 struct omemoStore {
-  bool isinitialized;
+  bool init;
   struct omemoKeyPair identity;
   struct omemoSignedPreKey cursignedprekey, prevsignedprekey;
   struct omemoPreKey prekeys[OMEMO_NUMPREKEYS];
@@ -120,7 +121,7 @@ struct omemoStore {
 };
 
 struct omemoSession {
-  int fsm;
+  int init;
   omemoKey remoteidentity;
   struct omemoState state;
   omemoKey pendingek;
@@ -210,16 +211,6 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session);
  */
 OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
                                          struct omemoSession *session);
-
-static inline bool
-omemoIsSessionInitialized(const struct omemoSession *session) {
-  return !!session->fsm;
-}
-
-static inline bool
-omemoIsStoreInitialized(const struct omemoStore *store) {
-  return store->isinitialized;
-}
 
 /**
  * Initialize OMEMO session from retrieved bundle.

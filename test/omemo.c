@@ -119,7 +119,7 @@ static void TestEncryptSize() {
   assert(!omemoDeserializeStore(store_inc, store_inc_len, &store));
   // TODO: fill all keys with random values??
   struct omemoSession session = {0};
-  session.fsm = SESSION_INIT;
+  session.init = SESSION_INIT;
   session.state.ns = UINT32_MAX;
   session.state.pn = UINT32_MAX;
   session.pendingpk_id = UINT32_MAX;
@@ -394,7 +394,7 @@ static void TestReceive() {
   memset(&session, 0, sizeof(session));
   struct omemoStore store;
   memset(&store, 0, sizeof(struct omemoStore));
-  store.isinitialized = true;
+  store.init = true;
   store.prekeys[55].id = 56;
   CopyHex(store.prekeys[55].kp.pub, "c0a2e2216d40765490501fcf8d31892c1a4cf60ed880ae3422daa767c430916b");
   CopyHex(store.prekeys[55].kp.prv, "e8f9420a195d93f6d4acf9a5d92748aebd235bcd7648b19849882d96f8fdcf41");
