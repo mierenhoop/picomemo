@@ -125,7 +125,7 @@ static void TestEncryptSize() {
   session.usedpk_id = UINT32_MAX;
   session.usedspk_id = UINT32_MAX;
   struct omemoKeyMessage msg;
-  omemoKeyPayload payload;
+  uint8_t payload[OMEMO_KEYSIZE];
   assert(!EncryptKeyImpl(&session, &store, &msg, payload, sizeof(payload)));
   assert(msg.n == sizeof(msg.p));
 }
@@ -265,40 +265,28 @@ void TestKeyConversions() {
   TestCurvePubToEdPub();
 }
 
-// This would in reality parse the bundle's XML instead of their store.
-static void ParseBundle(struct omemoBundle *bundle, struct omemoStore *store) {
-  int pk_id = 42; // Something truly random :)
-  memcpy(bundle->spks, store->cursignedprekey.sig, sizeof(omemoCurveSignature));
-  memcpy(bundle->spk, store->cursignedprekey.kp.pub, sizeof(omemoKey));
-  memcpy(bundle->ik, store->identity.pub, sizeof(omemoKey));
-  memcpy(bundle->pk, store->prekeys[pk_id-1].kp.pub, sizeof(omemoKey));
-  assert(store->prekeys[pk_id-1].id == 42);
-  bundle->pk_id = store->prekeys[pk_id-1].id;
-  bundle->spk_id = store->cursignedprekey.id;
-}
-
 static void TestEncryption() {
   const uint8_t *msg = "Hello there!";
   size_t n = strlen(msg);
   uint8_t encrypted[100], decrypted[100];
   strcpy(decrypted, msg);
-  omemoKeyPayload payload;
+  uint8_t payload[OMEMO_KEYSIZE];
 #ifdef OMEMO2
   assert(!omemoEncryptMessage(encrypted, payload, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
-  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(omemoKeyPayload), encrypted, n+omemoGetMessagePadSize(n)));
+  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(payload), encrypted, n+omemoGetMessagePadSize(n)));
 #else
   uint8_t iv[12];
   assert(!omemoEncryptMessage(encrypted, payload, iv, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
-  assert(!omemoDecryptMessage(decrypted, payload, sizeof(omemoKeyPayload), iv, encrypted, n));
+  assert(!omemoDecryptMessage(decrypted, payload, sizeof(payload), iv, encrypted, n));
 #endif
   assert(!memcmp(msg, decrypted, n));
 
 #ifdef OMEMO2
   CopyHex(payload, "6820575d498eff7babf1d1c3e23358a515e439ac9b649c5a6b631256a7851f3f962a8aeecb68c146333aa690ff516f2f");
   CopyHex(encrypted, "84890dc74a7f6fd7a1e22059e83bb4d1");
-  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(omemoKeyPayload), encrypted, 16));
+  assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(payload), encrypted, 16));
   assert(n == 9);
   assert(!memcmp("plaintext", decrypted, 9));
 #endif
@@ -306,15 +294,15 @@ static void TestEncryption() {
 
 // user is either a or b
 #define Send(user, id) do { \
-    assert(!omemoRandom(messages[id].payload, sizeof(omemoKeyPayload))); \
+    assert(!omemoRandom(messages[id].payload, OMEMO_KEYSIZE)); \
     assert(!omemoEncryptKey(&session##user, &store##user, &messages[id].msg, messages[id].payload, sizeof(messages[id].payload))); \
   } while (0)
 
 #define Recv(user, id, isprekey) do { \
-    omemoKeyPayload dec; \
+    uint8_t dec[OMEMO_KEYSIZE]; \
     size_t decn[1] = {sizeof(dec)}; \
     assert(!omemoDecryptKey(&session##user, &store##user, dec, decn, isprekey, messages[id].msg.p, messages[id].msg.n)); \
-    assert(!memcmp(messages[id].payload, dec, sizeof(omemoKeyPayload))); \
+    assert(!memcmp(messages[id].payload, dec, OMEMO_KEYSIZE)); \
   } while (0);
 
 #define MKSKIPPEDN 10
@@ -347,9 +335,19 @@ int omemoStoreMessageKey(struct omemoSession *, const struct omemoMessageKey *k,
   return 0;
 }
 
+static void Init(struct omemoSession *sessiona, struct omemoStore *storea, struct omemoStore *storeb) {
+  omemoSerializedKey spk, ik, pk;
+  int pk_id = 42; // Something truly random :)
+  omemoSerializeKey(spk, storeb->cursignedprekey.kp.pub);
+  omemoSerializeKey(ik, storeb->identity.pub);
+  omemoSerializeKey(pk, storeb->prekeys[pk_id-1].kp.pub);
+  assert(storeb->prekeys[pk_id-1].id == 42);
+  assert(omemoInitFromBundle(sessiona, storea, storeb->cursignedprekey.sig, spk, ik, pk, storeb->cursignedprekey.id, storeb->prekeys[pk_id-1].id) == 0);
+}
+
 static void TestSession() {
   struct {
-    omemoKeyPayload payload;
+    uint8_t payload[OMEMO_KEYSIZE];
     struct omemoKeyMessage msg;
   } messages[100];
 
@@ -357,13 +355,14 @@ static void TestSession() {
   assert(!omemoSetupStore(&storea));
   assert(!omemoSetupStore(&storeb));
 
-  struct omemoBundle bundleb;
-  ParseBundle(&bundleb, &storeb);
+  //struct omemoBundle bundleb;
+  //ParseBundle(&bundleb, &storeb);
 
   struct omemoSession sessiona, sessionb;
   memset(&sessiona, 0, sizeof(sessiona));
   memset(&sessionb, 0, sizeof(sessionb));
-  assert(omemoInitFromBundle(&sessiona, &storea, &bundleb) == 0);
+  //assert(omemoInitFromBundle(&sessiona, &storea, &bundleb) == 0);
+  Init(&sessiona, &storea, &storeb);
 
   Send(a, 0);
   Recv(b, 0, true);
@@ -405,7 +404,7 @@ static void TestReceive() {
   CopyHex(store.cursignedprekey.kp.pub, "0a90c1ea3558b15625ad78e20861a39b1f30ca1c425a0e50557b0868821c661f");
   CopyHex(store.cursignedprekey.kp.prv, "805eb8a8982b4206d0bec56bd1e861141f2c1b48386fa35ee7231834be1dd478");
   CopyHex(store.cursignedprekey.sig, "0fa2490e4899a3da85a94093fb27e97f15d05e99bab361c9a4ca388bec6685c61d96241c0020c101854388fd41e8932a7e4fba37bc454a21a6bcc037b0407808");
-  omemoKeyPayload payload;
+  uint8_t payload[OMEMO_KEYSIZE];
   uint8_t msg[180];
   CopyHex(msg,"33083812210508a21e22879385c9f5ea5ef0a50b993167659fbc0e90614365b9d0147ac8f1201a21057f1a8715095495c17552d720975d8405c38ed11bee9404bca19062d352a9c7082252330a2105e5bbca217d32f97f860ecd3c47df86f2a71eb8d2e387e31dd1f5f5349863b455100018002220a0bae4d6e5da28a1897fa3562cd4d24ee60bc9a5d4daf0f13646239bec36a2b4fd5aa1843e12d6f128f1eaa07b3001");
   size_t pn[1] = {sizeof(payload)};
@@ -551,13 +550,14 @@ static void TestSerialization() {
   assert(!omemoSetupStore(&storea));
   assert(!omemoSetupStore(&storeb));
 
-  struct omemoBundle bundleb;
-  ParseBundle(&bundleb, &storeb);
+  //struct omemoBundle bundleb;
+  //ParseBundle(&bundleb, &storeb);
 
   struct omemoSession sessiona, sessionb;
   memset(&sessiona, 0, sizeof(sessiona));
   memset(&sessionb, 0, sizeof(sessionb));
-  assert(omemoInitFromBundle(&sessiona, &storea, &bundleb) == 0);
+  //assert(omemoInitFromBundle(&sessiona, &storea, &bundleb) == 0);
+  Init(&sessiona, &storea, &storeb);
 
   size_t n = omemoGetSerializedStoreSize(&storea);
   uint8_t *buf = malloc(n);
@@ -589,11 +589,11 @@ static void TestSessionIntegration() {
   assert(n > 0);
   fclose(f);
 
-  omemoKeyPayload payload;
+  uint8_t payload[OMEMO_KEYSIZE];
   size_t pn[1] = {sizeof(payload)};
   assert(!omemoDecryptKey(&session, &store, payload, pn, true, buf, n));
 
-  omemoKeyPayload exp;
+  uint8_t exp[OMEMO_KEYSIZE];
 #ifdef OMEMO2
   memset(exp,    0x55, 32);
   memset(exp+32, 0xaa, 16);

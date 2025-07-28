@@ -39,7 +39,7 @@
 
 #ifdef OMEMO2
 
-#define OMEMO_MAXPAYLOAD                     48
+#define OMEMO_KEYSIZE                        48
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
 #define OMEMO_INTERNAL_HEADER_MAXSIZE        (2 * 6 + 34 + 2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE                                 \
@@ -50,7 +50,7 @@
 
 #else
 
-#define OMEMO_MAXPAYLOAD                     32
+#define OMEMO_KEYSIZE                        32
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 48
 #define OMEMO_INTERNAL_HEADER_MAXSIZE        (1 + 35 + 2 * 6 + 2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE                                 \
@@ -60,6 +60,8 @@
   (OMEMO_INTERNAL_FULLMSG_MAXSIZE + 8)
 
 #endif
+
+#define OMEMO_MAXPAYLOAD OMEMO_KEYSIZE
 
 typedef uint8_t omemoKey[32];
 #ifdef OMEMO2
@@ -98,9 +100,6 @@ struct omemoState {
   uint32_t ns, nr, pn;
 };
 
-// TODO: remove
-typedef uint8_t omemoKeyPayload[OMEMO_MAXPAYLOAD];
-
 struct omemoKeyMessage {
   uint8_t p[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE +
             OMEMO_INTERNAL_ENCRYPTED_MAXSIZE];
@@ -126,13 +125,6 @@ struct omemoSession {
   struct omemoState state;
   omemoKey usedek;
   uint32_t usedpk_id, usedspk_id;
-};
-
-struct omemoBundle {
-  omemoCurveSignature spks;
-  omemoKey spk, ik;
-  omemoKey pk; // Randomly selected prekey
-  uint32_t pk_id, spk_id;
 };
 
 /**
@@ -214,15 +206,14 @@ OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
 
 /**
  * Initialize OMEMO session from retrieved bundle.
- *
- * The bundle structure must be manually filled with relevant data of a
- * recently retrieved bundle. It is important to note that the keys in
- * an OMEMO 0.3 XML bundle are in serialized form with 33 bytes and the
- * last 32 bytes should be copied in the bundle structure.
  */
 OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
                                      const struct omemoStore *store,
-                                     const struct omemoBundle *bundle);
+                                     const omemoCurveSignature spks,
+                                     const omemoSerializedKey spk,
+                                     const omemoSerializedKey ik,
+                                     const omemoSerializedKey pk,
+                                     uint32_t spk_id, uint32_t pk_id);
 
 /**
  * Encrypt message encryption key payload for a specific recipient.

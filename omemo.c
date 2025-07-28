@@ -718,37 +718,39 @@ static int RatchetInitAlice(struct omemoState *state, const omemoKey sk,
 
 OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
                                      const struct omemoStore *store,
-                                     const struct omemoBundle *bundle) {
-  if (!session || !store || !bundle)
+                                     const omemoCurveSignature spks,
+                                     const omemoSerializedKey spk,
+                                     const omemoSerializedKey ik,
+                                     const omemoSerializedKey pk,
+                                     uint32_t spk_id, uint32_t pk_id) {
+  if (!session || !store)
     return OMEMO_EPARAM;
-  omemoSerializedKey serspk;
-  omemoSerializeKey(serspk, bundle->spk);
-  if (!VerifySignature(bundle->spks, bundle->ik, serspk, SerLen)) {
+  if (!VerifySignature(spks, GetRawKey(ik), spk, SerLen)) {
     return OMEMO_ECORRUPT;
   }
   struct omemoKeyPair eka;
   TRY(GenerateKeyPair(&eka));
   omemoKey sk;
 #ifdef OMEMO2
-  omemoKey ik, edy;
-  memcpy(edy, bundle->ik, 32);
+  omemoKey ikx, edy;
+  memcpy(edy, GetRawKey(ik), 32);
   edy[31] &= 0x7f;
-  MapToMont(ik, edy);
+  MapToMont(ikx, edy);
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
-                      ik, bundle->spk, bundle->pk));
+                      ikx, GetRawKey(spk), GetRawKey(pk)));
 #else
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
-                      bundle->ik, bundle->spk, bundle->pk));
+                      GetRawKey(ik), GetRawKey(spk), GetRawKey(pk)));
 #endif
-  int r = RatchetInitAlice(&session->state, sk, bundle->spk, &eka);
+  int r = RatchetInitAlice(&session->state, sk, GetRawKey(spk), &eka);
   if (r) {
     memset(&session->state, 0, sizeof(struct omemoState));
     return r;
   }
   memcpy(session->usedek, eka.pub, 32);
-  memcpy(session->remoteidentity, bundle->ik, 32);
-  session->usedpk_id = bundle->pk_id;
-  session->usedspk_id = bundle->spk_id;
+  memcpy(session->remoteidentity, GetRawKey(ik), 32);
+  session->usedpk_id = pk_id;
+  session->usedspk_id = spk_id;
   session->init = SESSION_INIT;
   return 0;
 }

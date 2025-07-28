@@ -284,10 +284,8 @@ static void ParseBase64Content(struct xmppParser *parser, uint8_t *d, int n) {
   assert(olen == n);
 }
 
-static void ParseBase64PubKey(struct xmppParser *parser, omemoKey d) {
-  omemoSerializedKey ser;
-  ParseBase64Content(parser, ser, 33);
-  memcpy(d, ser+1, 32);
+static void ParseBase64PubKey(struct xmppParser *parser, omemoSerializedKey ser) {
+  ParseBase64Content(parser, ser, sizeof(omemoSerializedKey));
 }
 
 static int ParseNumberAttribute(struct xmppParser *parser, const char *name) {
@@ -304,13 +302,13 @@ static int ParseNumberAttribute(struct xmppParser *parser, const char *name) {
   return 0;
 }
 
-static bool ParseRandomPreKey(struct xmppParser *parser, struct omemoBundle *bundle) {
+static bool ParseRandomPreKey(struct xmppParser *parser, omemoSerializedKey pk, uint32_t *id) {
   int i = 0;
   while (xmppParseElement(parser)) {
     assert(!strcmp(parser->x.elem, "preKeyPublic"));
     if (RandomInt() % ++i == 0) {
-      bundle->pk_id = ParseNumberAttribute(parser, "preKeyId");
-      ParseBase64PubKey(parser, bundle->pk);
+      *id = ParseNumberAttribute(parser, "preKeyId");
+      ParseBase64PubKey(parser, pk);
     } else {
       xmppParseUnknown(parser);
     }
@@ -320,28 +318,30 @@ static bool ParseRandomPreKey(struct xmppParser *parser, struct omemoBundle *bun
 }
 
 static void ParseBundle(struct xmppParser *parser) {
-  struct omemoBundle bundle;
+  omemoSerializedKey spk, ik, pk;
+  omemoCurveSignature sig;
+  uint32_t pk_id, spk_id;
   int found = 0;
   while (xmppParseElement(parser)) {
     if (!strcmp(parser->x.elem, "signedPreKeyPublic")) {
-      bundle.spk_id = ParseNumberAttribute(parser, "signedPreKeyId");
-      ParseBase64PubKey(parser, bundle.spk);
+      spk_id = ParseNumberAttribute(parser, "signedPreKeyId");
+      ParseBase64PubKey(parser, spk);
       found |= 1 << 0;
     } else if (!strcmp(parser->x.elem, "signedPreKeySignature")) {
-      ParseBase64Content(parser, bundle.spks, 64);
+      ParseBase64Content(parser, sig, 64);
       found |= 1 << 1;
     } else if (!strcmp(parser->x.elem, "identityKey")) {
-      ParseBase64PubKey(parser, bundle.ik);
+      ParseBase64PubKey(parser, ik);
       found |= 1 << 2;
     } else if (!strcmp(parser->x.elem, "prekeys")) {
-      if (ParseRandomPreKey(parser, &bundle))
+      if (ParseRandomPreKey(parser, pk, &pk_id))
         found |= 1 << 3;
     } else {
       xmppParseUnknown(parser);
     }
   }
   assert(found == 0xf);
-  int r = omemoInitFromBundle(&omemosession, &omemostore, &bundle);
+  int r = omemoInitFromBundle(&omemosession, &omemostore, sig, spk, ik, pk, spk_id, pk_id);
   SaveSession();
   if (r < 0) {
     LogWarn("Bundle init fail: %d", r);
@@ -411,9 +411,10 @@ static void ParseEncryptedMessage(struct xmppParser *parser, const struct xmppXm
     return;
   }
   DecodeBase64(&key, &keysz, &keyslc);
-  omemoKeyPayload decryptedkey;
+  uint8_t decryptedkey[OMEMO_KEYSIZE];
   BeginTransaction();
-  int r = omemoDecryptKey(&omemosession, &omemostore, decryptedkey, isprekey, key, keysz);
+  size_t pn[1] = {sizeof(decryptedkey)};
+  int r = omemoDecryptKey(&omemosession, &omemostore, decryptedkey, pn, isprekey, key, keysz);
   if (r < 0) {
     CancelTransaction();
     LogWarn("omemoKeyMessage decryption error: %d", r);
@@ -428,7 +429,7 @@ static void ParseEncryptedMessage(struct xmppParser *parser, const struct xmppXm
     if (ivsz != 12) goto free;
     decryptedpayload = Malloc(payloadsz+1);
     decryptedpayload[payloadsz] = 0;
-    r = omemoDecryptMessage(decryptedpayload, decryptedkey, sizeof(omemoKeyPayload), iv, payload, payloadsz);
+    r = omemoDecryptMessage(decryptedpayload, decryptedkey, sizeof(decryptedkey), iv, payload, payloadsz);
     if (r < 0) {
       LogWarn("Message decryption error: %d", r);
       goto free;
@@ -715,7 +716,7 @@ static void SendNormalOmemo(const char *msg) {
   size_t msgn = strlen(msg);
   char *payload = Malloc(msgn);
   uint8_t iv[12];
-  omemoKeyPayload encryptionkey;
+  uint8_t encryptionkey[OMEMO_KEYSIZE];
   int r = omemoEncryptMessage(payload, encryptionkey, iv, msg, msgn);
   if (r < 0) {
     LogWarn("Message encryption error: %d", r);
@@ -723,7 +724,7 @@ static void SendNormalOmemo(const char *msg) {
   }
 
   struct omemoKeyMessage encrypted;
-  r = omemoEncryptKey(&omemosession, &omemostore, &encrypted, encryptionkey);
+  r = omemoEncryptKey(&omemosession, &omemostore, &encrypted, encryptionkey, sizeof(encryptionkey));
   if (r < 0) {
     LogWarn("Message encryption error: %d", r);
     return;
