@@ -160,9 +160,14 @@ class XmppClient {
             key, isprekey = FindKeyForOurDevice(msg)
 >           omemoDecryptKey(&session, &store, out key_payload, isprekey, key)
             if isprekey {
-                // A prekey is used, publish your bundle again
-                // without that prekey!
+                // Remove session.usedpk_id from bundle. You should
+                // actually wait a bit before removing the key.
+                for (k in store.prekeys)
+                    bzero(k) if k.id == session.usedpk_id
+>               omemoRefillPreKeys(&store)
                 PublishBundle(&store)
+                // Send empty message
+                SendEncryptedMessage(msg.from, nil)
             }
             plaintext = allocate(len(msg.payload))
 >           omemoDecryptMessage(plaintext, key_payload, msg.iv, msg.payload, len(msg.payload))

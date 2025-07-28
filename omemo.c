@@ -325,19 +325,19 @@ static size_t FormatPreKeyMessage(
 //  HEADER(dh_pair, pn, n)
 static size_t
 FormatMessageHeader(uint8_t d[static OMEMO_INTERNAL_HEADER_MAXSIZE],
-                    uint32_t n, uint32_t pn, const omemoKey dhs) {
+                    uint32_t n, uint32_t pn, const omemoKey dhs, size_t payloadn) {
   uint8_t *p = d;
 #ifdef OMEMO2
   p = FormatVarInt(p, PB_UINT32, 1, n);
   p = FormatVarInt(p, PB_UINT32, 2, pn);
   p = FormatKey(p, 3, dhs);
-  p = FormatVarInt(p, PB_LEN, 4, OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE);
+  p = FormatVarInt(p, PB_LEN, 4, payloadn);
 #else
   *p++ = (3 << 4) | 3;
   p = FormatSerializedKey(p, 1, dhs);
   p = FormatVarInt(p, PB_UINT32, 2, n);
   p = FormatVarInt(p, PB_UINT32, 3, pn);
-  p = FormatVarInt(p, PB_LEN, 4, OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE);
+  p = FormatVarInt(p, PB_LEN, 4, payloadn);
 #endif
   return p - d;
 }
@@ -559,13 +559,17 @@ static void AesCbc(int mode, uint8_t key[static 32], size_t n,
   assert(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
 }
 
-static void Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
-                    const omemoKeyPayload in, omemoKey key,
+#define GetPad(n) (16 - ((n) % 16))
+
+static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
+                    const uint8_t *in, size_t n, omemoKey key,
                     uint8_t iv[static 16]) {
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
-  memcpy(tmp, in, OMEMO_INTERNAL_PAYLOAD_SIZE);
-  memset(tmp + OMEMO_INTERNAL_PAYLOAD_SIZE, 0x10, 0x10);
-  AesCbc(MBEDTLS_AES_ENCRYPT, key, sizeof(tmp), iv, tmp, out);
+  int pad = GetPad(n);
+  memcpy(tmp, in, n);
+  memset(tmp + n, pad, pad);
+  AesCbc(MBEDTLS_AES_ENCRYPT, key, n+pad, iv, tmp, out);
+  return n + pad;
 }
 
 static const uint8_t Zero32[32];
@@ -599,7 +603,7 @@ static void GetBaseMaterials(omemoKey d, omemoKey mk,
 static int EncryptKeyImpl(struct omemoSession *session,
                           const struct omemoStore *store,
                           struct omemoKeyMessage *msg,
-                          const omemoKeyPayload payload) {
+                          const uint8_t *payload, size_t pn) {
   if (!session->init)
     return OMEMO_ESTATE;
   omemoKey mk;
@@ -617,9 +621,8 @@ static int EncryptKeyImpl(struct omemoSession *session,
 #endif
   msg->n +=
       FormatMessageHeader(msg->p + msg->n, session->state.ns,
-                          session->state.pn, session->state.dhs.pub);
-  Encrypt(msg->p + msg->n, payload, kdfout->cipher, kdfout->iv);
-  msg->n += OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE;
+                          session->state.pn, session->state.dhs.pub, pn+GetPad(pn));
+  msg->n += Encrypt(msg->p + msg->n, payload, pn, kdfout->cipher, kdfout->iv);
 #ifdef OMEMO2
   msg->p[19] = msg->n - 20;
   TRY(GetMac(msg->p + 2, store->identity.pub, session->remoteidentity,
@@ -649,14 +652,14 @@ static int EncryptKeyImpl(struct omemoSession *session,
 OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
                                  const struct omemoStore *store,
                                  struct omemoKeyMessage *msg,
-                                 const omemoKeyPayload payload) {
-  if (!session || !store || !msg || !payload)
+                                 const uint8_t *payload, size_t pn) {
+  if (!session || !store || !msg || pn > OMEMO_MAXPAYLOAD)
     return OMEMO_EPARAM;
   int r;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
   memset(msg, 0, sizeof(struct omemoKeyMessage));
-  if ((r = EncryptKeyImpl(session, store, msg, payload))) {
+  if ((r = EncryptKeyImpl(session, store, msg, payload, pn))) {
     memcpy(&session->state, &backup, sizeof(struct omemoState));
     memset(msg, 0, sizeof(struct omemoKeyMessage));
   }
@@ -830,7 +833,7 @@ static int SkipMessageKeys(struct omemoSession *session, uint32_t n,
 
 static int DecryptKeyImpl(struct omemoSession *session,
                           const struct omemoStore *store,
-                          omemoKeyPayload decrypted, const uint8_t *msg,
+                          uint8_t *decrypted, size_t *pn, const uint8_t *msg,
                           size_t msgn) {
 #ifdef OMEMO2
   struct ProtobufField fields1[3] = {
@@ -863,15 +866,9 @@ static int DecryptKeyImpl(struct omemoSession *session,
   const uint8_t *realmac = msg + msgn - 8;
 #endif
 
-#ifdef OMEMO2
-  if (fields[PbMsg_ciphertext].v != 64)
+  uint32_t encn = fields[PbMsg_ciphertext].v;
+  if (encn < 16 || encn % 16 || encn > OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE)
     return OMEMO_ECORRUPT;
-#else
-  // Some clients send a 32 byte key...
-  if (fields[PbMsg_ciphertext].v != 48 &&
-      fields[PbMsg_ciphertext].v != 32)
-    return OMEMO_ECORRUPT;
-#endif
 
   uint32_t headern = fields[PbMsg_n].v;
   uint32_t headerpn = fields[PbMsg_pn].v;
@@ -925,16 +922,20 @@ static int DecryptKeyImpl(struct omemoSession *session,
     return OMEMO_ECORRUPT;
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
   AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher,
-         fields[PbMsg_ciphertext].v, kdfout->iv,
+         encn, kdfout->iv,
          fields[PbMsg_ciphertext].p, tmp);
-  memcpy(decrypted, tmp, sizeof(omemoKeyPayload));
+  uint8_t pad = tmp[encn - 1];
+  if (pad > 16 || pad > encn || encn-pad > *pn)
+    return OMEMO_ECORRUPT;
+  memcpy(decrypted, tmp, encn-pad);
+  *pn = encn-pad;
   session->init = SESSION_READY;
   return 0;
 }
 
 static int DecryptGenericKeyImpl(struct omemoSession *session,
                                  struct omemoStore *store,
-                                 omemoKeyPayload payload, bool isprekey,
+                                 uint8_t *payload, size_t *pn, bool isprekey,
                                  const uint8_t *msg, size_t msgn) {
   struct omemoPreKey *pk = NULL;
   if (isprekey) {
@@ -1003,22 +1004,22 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
   } else if (session->init == SESSION_UNINIT){
     return OMEMO_ESTATE;
   }
-  return DecryptKeyImpl(session, store, payload, msg, msgn);
+  return DecryptKeyImpl(session, store, payload, pn, msg, msgn);
 }
 
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  struct omemoStore *store,
-                                 omemoKeyPayload payload, bool isprekey,
-                                 const uint8_t *msg, size_t msgn) {
-  if (!session || !store || !payload || !store->init || !msg)
+                                 uint8_t *payload, size_t *pn,
+                                 bool isprekey, const uint8_t *msg,
+                                 size_t msgn) {
+  if (!session || !store || !payload || !pn || !store->init || !msg)
     return OMEMO_EPARAM;
   struct omemoState backup;
   memcpy(&backup, &session->state, sizeof(struct omemoState));
   int r;
-  if ((r = DecryptGenericKeyImpl(session, store, payload, isprekey, msg,
+  if ((r = DecryptGenericKeyImpl(session, store, payload, pn, isprekey, msg,
                                  msgn))) {
     memcpy(&session->state, &backup, sizeof(struct omemoState));
-    memset(payload, 0, OMEMO_INTERNAL_PAYLOAD_SIZE);
   }
   return r;
 }
@@ -1074,7 +1075,7 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
 
 #ifdef OMEMO2
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
-                                     omemoKeyPayload payload,
+                                     uint8_t payload[48],
                                      uint8_t *s, size_t n) {
   if (!d || !payload || !s)
     return OMEMO_EPARAM;
@@ -1095,7 +1096,7 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
 }
 #else
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
-                                     omemoKeyPayload payload,
+                                     uint8_t payload[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n) {
   if (!d || !payload || !iv || !s)

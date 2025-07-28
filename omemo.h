@@ -39,7 +39,7 @@
 
 #ifdef OMEMO2
 
-#define OMEMO_INTERNAL_PAYLOAD_SIZE          48
+#define OMEMO_MAXPAYLOAD                     48
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
 #define OMEMO_INTERNAL_HEADER_MAXSIZE        (2 * 6 + 34 + 2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE                                 \
@@ -50,7 +50,7 @@
 
 #else
 
-#define OMEMO_INTERNAL_PAYLOAD_SIZE          32
+#define OMEMO_MAXPAYLOAD                     32
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 48
 #define OMEMO_INTERNAL_HEADER_MAXSIZE        (1 + 35 + 2 * 6 + 2)
 #define OMEMO_INTERNAL_FULLMSG_MAXSIZE                                 \
@@ -98,7 +98,8 @@ struct omemoState {
   uint32_t ns, nr, pn;
 };
 
-typedef uint8_t omemoKeyPayload[OMEMO_INTERNAL_PAYLOAD_SIZE];
+// TODO: remove
+typedef uint8_t omemoKeyPayload[OMEMO_MAXPAYLOAD];
 
 struct omemoKeyMessage {
   uint8_t p[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE +
@@ -229,7 +230,7 @@ OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
 OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
                                  const struct omemoStore *store,
                                  struct omemoKeyMessage *msg,
-                                 const omemoKeyPayload payload);
+                                 const uint8_t *payload, size_t pn);
 /**
  * Decrypt message encryption key payload for a specific recipient.
  *
@@ -243,8 +244,9 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
  */
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  struct omemoStore *store,
-                                 omemoKeyPayload payload, bool isprekey,
-                                 const uint8_t *msg, size_t msgn);
+                                 uint8_t *payload, size_t *pn,
+                                 bool isprekey, const uint8_t *msg,
+                                 size_t msgn);
 
 #ifdef OMEMO2
 #define omemoGetMessagePadSize(n) (16 - (n % 16))
@@ -258,7 +260,7 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
  * @param n is the original message size
  */
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
-                                     omemoKeyPayload payload,
+                                     uint8_t payload[48],
                                      uint8_t *s, size_t n);
 #else
 /**
@@ -268,7 +270,7 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
  * @param n is the size of the buffer in d and s
  */
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
-                                     omemoKeyPayload payload,
+                                     uint8_t payload[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n);
 #endif
@@ -278,8 +280,7 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
  * Decrypt message taken from the <payload> element.
  *
  * @param payload is the decrypted payload of the omemoKeyMessage
- * @param pn is the size of payload, some clients might make the tag
- * larger than 16 bytes
+ * @param pn is the size of payload
  * @param n is the size of the buffer in d and s
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,

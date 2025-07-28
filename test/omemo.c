@@ -111,7 +111,7 @@ static void TestFormattings() {
   uint8_t buf[OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE+OMEMO_INTERNAL_ENCRYPTED_MAXSIZE];
   omemoKey k = {0};
   assert(FormatPreKeyMessage(buf, UINT32_MAX, UINT32_MAX, k, k, OMEMO_INTERNAL_ENCRYPTED_MAXSIZE) == OMEMO_INTERNAL_PREKEYHEADER_MAXSIZE);
-  assert(FormatMessageHeader(buf, UINT32_MAX, UINT32_MAX, k) == OMEMO_INTERNAL_HEADER_MAXSIZE);
+  assert(FormatMessageHeader(buf, UINT32_MAX, UINT32_MAX, k, OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE) == OMEMO_INTERNAL_HEADER_MAXSIZE);
 }
 
 static void TestEncryptSize() {
@@ -126,7 +126,7 @@ static void TestEncryptSize() {
   session.usedspk_id = UINT32_MAX;
   struct omemoKeyMessage msg;
   omemoKeyPayload payload;
-  assert(!EncryptKeyImpl(&session, &store, &msg, payload));
+  assert(!EncryptKeyImpl(&session, &store, &msg, payload, sizeof(payload)));
   assert(msg.n == sizeof(msg.p));
 }
 
@@ -307,12 +307,13 @@ static void TestEncryption() {
 // user is either a or b
 #define Send(user, id) do { \
     assert(!omemoRandom(messages[id].payload, sizeof(omemoKeyPayload))); \
-    assert(!omemoEncryptKey(&session##user, &store##user, &messages[id].msg, messages[id].payload)); \
+    assert(!omemoEncryptKey(&session##user, &store##user, &messages[id].msg, messages[id].payload, sizeof(messages[id].payload))); \
   } while (0)
 
 #define Recv(user, id, isprekey) do { \
     omemoKeyPayload dec; \
-    assert(!omemoDecryptKey(&session##user, &store##user, dec, isprekey, messages[id].msg.p, messages[id].msg.n)); \
+    size_t decn[1] = {sizeof(dec)}; \
+    assert(!omemoDecryptKey(&session##user, &store##user, dec, decn, isprekey, messages[id].msg.p, messages[id].msg.n)); \
     assert(!memcmp(messages[id].payload, dec, sizeof(omemoKeyPayload))); \
   } while (0);
 
@@ -407,7 +408,8 @@ static void TestReceive() {
   omemoKeyPayload payload;
   uint8_t msg[180];
   CopyHex(msg,"33083812210508a21e22879385c9f5ea5ef0a50b993167659fbc0e90614365b9d0147ac8f1201a21057f1a8715095495c17552d720975d8405c38ed11bee9404bca19062d352a9c7082252330a2105e5bbca217d32f97f860ecd3c47df86f2a71eb8d2e387e31dd1f5f5349863b455100018002220a0bae4d6e5da28a1897fa3562cd4d24ee60bc9a5d4daf0f13646239bec36a2b4fd5aa1843e12d6f128f1eaa07b3001");
-  assert(omemoDecryptKey(&session, &store, payload, true, msg, 164) == 0);
+  size_t pn[1] = {sizeof(payload)};
+  assert(omemoDecryptKey(&session, &store, payload, pn, true, msg, 164) == 0);
 #endif
 }
 
@@ -588,7 +590,8 @@ static void TestSessionIntegration() {
   fclose(f);
 
   omemoKeyPayload payload;
-  assert(!omemoDecryptKey(&session, &store, payload, true, buf, n));
+  size_t pn[1] = {sizeof(payload)};
+  assert(!omemoDecryptKey(&session, &store, payload, pn, true, buf, n));
 
   omemoKeyPayload exp;
 #ifdef OMEMO2
@@ -602,7 +605,7 @@ static void TestSessionIntegration() {
 
   memset(payload, 0xcc, sizeof(payload));
   struct omemoKeyMessage msg;
-  assert(!omemoEncryptKey(&session, &store, &msg, payload));
+  assert(!omemoEncryptKey(&session, &store, &msg, payload, sizeof(payload)));
   f = fopen("o/resp.bin", "w");
   assert(f);
   assert(fwrite(msg.p, 1, msg.n, f) == msg.n);
