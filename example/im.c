@@ -341,7 +341,7 @@ static void ParseBundle(struct xmppParser *parser) {
     }
   }
   assert(found == 0xf);
-  int r = omemoInitFromBundle(&omemosession, &omemostore, sig, spk, ik, pk, spk_id, pk_id);
+  int r = omemoInitiateSession(&omemosession, &omemostore, sig, spk, ik, pk, spk_id, pk_id);
   SaveSession();
   if (r < 0) {
     LogWarn("Bundle init fail: %d", r);

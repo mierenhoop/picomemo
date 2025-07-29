@@ -123,9 +123,7 @@ class XmppClient {
             if not session {
                 session = {0}
                 bundlexml = FetchBundle(to_id, device_id)
-                struct omemoBundle bundle
-                FillBundle(&bundle, bundlexml)
->               omemoInitFromBundle(&session, &store, &bundle)
+>               omemoInitiateSession(&session, &store, bundle.spks, bundle.spk, ...)
 >               sessions.Set(to_jid, device_id, session)
             }
 >           omemoEncryptKey(&session, &store, out key_msg, key_payload)

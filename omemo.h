@@ -207,13 +207,13 @@ OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
 /**
  * Initialize OMEMO session from retrieved bundle.
  */
-OMEMO_EXPORT int omemoInitFromBundle(struct omemoSession *session,
-                                     const struct omemoStore *store,
-                                     const omemoCurveSignature spks,
-                                     const omemoSerializedKey spk,
-                                     const omemoSerializedKey ik,
-                                     const omemoSerializedKey pk,
-                                     uint32_t spk_id, uint32_t pk_id);
+OMEMO_EXPORT int omemoInitiateSession(struct omemoSession *session,
+                                      const struct omemoStore *store,
+                                      const omemoCurveSignature spks,
+                                      const omemoSerializedKey spk,
+                                      const omemoSerializedKey ik,
+                                      const omemoSerializedKey pk,
+                                      uint32_t spk_id, uint32_t pk_id);
 
 /**
  * Encrypt message encryption key payload for a specific recipient.
@@ -250,8 +250,7 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
  * @param d is the destination buffer that is the same size as s
  * @param n is the original message size
  */
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
-                                     uint8_t payload[48],
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[48],
                                      uint8_t *s, size_t n);
 #else
 /**
@@ -260,8 +259,7 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
  * @param payload (out) will contain the encrypted
  * @param n is the size of the buffer in d and s
  */
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d,
-                                     uint8_t payload[32],
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n);
 #endif

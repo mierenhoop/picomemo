@@ -25,8 +25,6 @@
 
 #include "o/store.inc"
 
-// TODO: for all exposed functions, test all error paths
-
 int omemoRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
 
 static void CopyHex(uint8_t *d, const char *hex) {
@@ -342,7 +340,7 @@ static void Init(struct omemoSession *sessiona, struct omemoStore *storea, struc
   omemoSerializeKey(ik, storeb->identity.pub);
   omemoSerializeKey(pk, storeb->prekeys[pk_id-1].kp.pub);
   assert(storeb->prekeys[pk_id-1].id == 42);
-  assert(omemoInitFromBundle(sessiona, storea, storeb->cursignedprekey.sig, spk, ik, pk, storeb->cursignedprekey.id, storeb->prekeys[pk_id-1].id) == 0);
+  assert(omemoInitiateSession(sessiona, storea, storeb->cursignedprekey.sig, spk, ik, pk, storeb->cursignedprekey.id, storeb->prekeys[pk_id-1].id) == 0);
 }
 
 static void TestSession() {
@@ -355,13 +353,9 @@ static void TestSession() {
   assert(!omemoSetupStore(&storea));
   assert(!omemoSetupStore(&storeb));
 
-  //struct omemoBundle bundleb;
-  //ParseBundle(&bundleb, &storeb);
-
   struct omemoSession sessiona, sessionb;
   memset(&sessiona, 0, sizeof(sessiona));
   memset(&sessionb, 0, sizeof(sessionb));
-  //assert(omemoInitFromBundle(&sessiona, &storea, &bundleb) == 0);
   Init(&sessiona, &storea, &storeb);
 
   Send(a, 0);
@@ -550,13 +544,9 @@ static void TestSerialization() {
   assert(!omemoSetupStore(&storea));
   assert(!omemoSetupStore(&storeb));
 
-  //struct omemoBundle bundleb;
-  //ParseBundle(&bundleb, &storeb);
-
   struct omemoSession sessiona, sessionb;
   memset(&sessiona, 0, sizeof(sessiona));
   memset(&sessionb, 0, sizeof(sessionb));
-  //assert(omemoInitFromBundle(&sessiona, &storea, &bundleb) == 0);
   Init(&sessiona, &storea, &storeb);
 
   size_t n = omemoGetSerializedStoreSize(&storea);
