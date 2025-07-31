@@ -107,10 +107,6 @@ struct omemoKeyMessage {
   bool isprekey;
 };
 
-// As the spec notes, a spk should be kept for one more rotation.
-// If prevsignedprekey doesn't exist, its id is 0. Therefore a valid id
-// is always >= 1; pkcounter is the id of the most recently generated
-// prekey.
 struct omemoStore {
   bool init;
   struct omemoKeyPair identity;
@@ -150,6 +146,7 @@ OMEMO_EXPORT int omemoLoadMessageKey(struct omemoSession *,
  * @see omemoLoadMessageKey()
  *
  * @param n amount of keys to be skipped in total
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoStoreMessageKey(struct omemoSession *,
                                       const struct omemoMessageKey *,
@@ -162,7 +159,7 @@ OMEMO_EXPORT int omemoStoreMessageKey(struct omemoSession *,
  *
  * @param p points to the to-be-filled array
  * @param n is the amount of random bytes which should be generated in p
- * @returns 0 if successful, anything else otherwise
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoRandom(void *p, size_t n);
 
@@ -174,28 +171,57 @@ OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k,
 
 /**
  * Generate a new store for an OMEMO device.
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoSetupStore(struct omemoStore *store);
 
 /**
- * Refill prekeys in store.
+ * Refill all removed prekeys in store.
  *
  * @returns 0 or OMEMO_ECRYPTO
  */
 OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store);
 
+/**
+ * Rotate signed prekey in store.
+ *
+ * Retains the previous signed prekey for one rotation.
+ *
+ * @returns 0 or OMEMO_ECRYPTO
+ */
 OMEMO_EXPORT int omemoRotateSignedPreKey(struct omemoStore *store);
 
+/**
+ * @returns size of buffer required for omemoSerializeStore
+ */
 OMEMO_EXPORT size_t
 omemoGetSerializedStoreSize(const struct omemoStore *store);
+
+/**
+ * @param d buffer with capacity returned by
+ * omemoGetSerializedStoreSize()
+ */
 OMEMO_EXPORT void omemoSerializeStore(uint8_t *d,
                                       const struct omemoStore *store);
+
+/**
+ * @returns 0 or OMEMO_E*
+ */
 OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
                                        struct omemoStore *store);
+/**
+ * @returns size of buffer required for omemoSerializeSession
+ */
 OMEMO_EXPORT size_t
 omemoGetSerializedSessionSize(const struct omemoSession *session);
+
+/**
+ * @param d buffer with capacity returned by
+ * omemoGetSerializedSessionSize()
+ */
 OMEMO_EXPORT void
-omemoSerializeSession(uint8_t *p, const struct omemoSession *session);
+omemoSerializeSession(uint8_t *d, const struct omemoSession *session);
 
 /**
  * @param session must be initialized with omemoSetupSession
@@ -205,7 +231,9 @@ OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
                                          struct omemoSession *session);
 
 /**
- * Initialize OMEMO session from retrieved bundle.
+ * Initiate OMEMO session with retrieved bundle.
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoInitiateSession(struct omemoSession *session,
                                       const struct omemoStore *store,
@@ -217,11 +245,13 @@ OMEMO_EXPORT int omemoInitiateSession(struct omemoSession *session,
 
 /**
  * Encrypt message encryption key payload for a specific recipient.
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
                                  const struct omemoStore *store,
                                  struct omemoKeyMessage *msg,
-                                 const uint8_t *payload, size_t pn);
+                                 const uint8_t *key, size_t keyn);
 /**
  * Decrypt message encryption key payload for a specific recipient.
  *
@@ -232,6 +262,8 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
  *
  * If session->state.nr >= 53 you should send an empty message back to
  * advance the ratchet.
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  struct omemoStore *store,
@@ -249,6 +281,8 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
  * `omemoGetMessagePadSize(n)` amount of bytes reserved at the end
  * @param d is the destination buffer that is the same size as s
  * @param n is the original message size
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[48],
                                      uint8_t *s, size_t n);
@@ -258,6 +292,8 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[48],
  *
  * @param payload (out) will contain the encrypted
  * @param n is the size of the buffer in d and s
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[32],
                                      uint8_t iv[12], const uint8_t *s,
@@ -271,6 +307,8 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[32],
  * @param payload is the decrypted payload of the omemoKeyMessage
  * @param pn is the size of payload
  * @param n is the size of the buffer in d and s
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
                                      const uint8_t *payload, size_t pn,
@@ -283,6 +321,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
  * @param pn is the size of payload, some clients might make the tag
  * larger than 16 bytes
  * @param n is the size of the buffer in d and s
+ *
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
                                      size_t pn, const uint8_t iv[12],

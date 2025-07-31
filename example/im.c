@@ -320,7 +320,7 @@ static bool ParseRandomPreKey(struct xmppParser *parser, omemoSerializedKey pk, 
 static void ParseBundle(struct xmppParser *parser) {
   omemoSerializedKey spk, ik, pk;
   omemoCurveSignature sig;
-  uint32_t pk_id, spk_id;
+  uint32_t pk_id = 0, spk_id = 0;
   int found = 0;
   while (xmppParseElement(parser)) {
     if (!strcmp(parser->x.elem, "signedPreKeyPublic")) {

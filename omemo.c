@@ -352,8 +352,7 @@ static int DoX25519(omemoKey shared, const omemoKey prv,
                     const omemoKey pub) {
 #ifdef OMEMO_NOHACL
   c25519_smult(shared, pub, prv);
-  // TODO: implement the same check
-  return 0;
+  return !f25519_eq(shared, f25519_zero) ? 0 : OMEMO_ECORRUPT;
 #else
   omemoKey tmp, tmp2;
   memcpy(tmp, prv, 32);
@@ -443,11 +442,6 @@ static int GenerateEdKeyPair(struct omemoKeyPair *kp) {
 }
 #endif
 
-static int GeneratePreKey(struct omemoPreKey *pk, uint32_t id) {
-  pk->id = id;
-  return GenerateKeyPair(&pk->kp);
-}
-
 static int GenerateSignedPreKey(struct omemoSignedPreKey *spk,
                                 uint32_t id,
                                 const struct omemoKeyPair *idkp) {
@@ -475,7 +469,8 @@ OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store) {
     if (!store->prekeys[i].id) {
       struct omemoPreKey pk;
       uint32_t n = IncrementWrapSkipZero(store->pkcounter);
-      TRY(GeneratePreKey(&pk, n));
+      pk.id = n;
+      TRY(GenerateKeyPair(&pk.kp));
       memcpy(store->prekeys + i, &pk, sizeof(struct omemoPreKey));
       store->pkcounter = n;
     }
@@ -536,7 +531,7 @@ static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
                   const uint8_t *msg, size_t msgn) {
   // This could theoretically happen while decrypting when the protobuf
   // is needlessly large.
-  if (msgn > OMEMO_INTERNAL_FULLMSG_MAXSIZE)
+  if (msgn > OMEMO_INTERNAL_FULLMSG_MAXSIZE + 4)
     return OMEMO_ECORRUPT;
   // Adding 4 in case some client has a large registration id
   uint8_t macinput[ADSIZE + OMEMO_INTERNAL_FULLMSG_MAXSIZE + 4],
@@ -964,11 +959,11 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
     // PreKeyWhisperMessage
     struct ProtobufField fields[7] = {
         [5] = {PB_UINT32},                             // registrationid
-        [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32},   // prekeyid
-        [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32},  // signedprekeyid
-        [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen}, // basekey/ek
-        [PbKeyEx_ik] = {PB_REQUIRED | PB_LEN, SerLen}, // identitykey/ik
-        [PbKeyEx_message] = {PB_REQUIRED | PB_LEN},    // message
+        [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32},
+        [PbKeyEx_spk_id] = {PB_REQUIRED | PB_UINT32},
+        [PbKeyEx_ek] = {PB_REQUIRED | PB_LEN, SerLen},
+        [PbKeyEx_ik] = {PB_REQUIRED | PB_LEN, SerLen},
+        [PbKeyEx_message] = {PB_REQUIRED | PB_LEN},
     };
     if (ParseProtobuf(msg + 1, msgn - 1, fields, 7))
       return OMEMO_EPROTOBUF;
@@ -1244,7 +1239,7 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   d = FormatVarInt(d, PB_UINT32, 8, session->state.ns);
   d = FormatVarInt(d, PB_UINT32, 9, session->state.nr);
   d = FormatVarInt(d, PB_UINT32, 10, session->state.pn);
-  // TODO: don't have to include used* first ratchet
+  // TODO: don't have to include used* after first ratchet
   d = FormatKey(d, 11, session->usedek);
   d = FormatVarInt(d, PB_UINT32, 12, session->usedpk_id);
   d = FormatVarInt(d, PB_UINT32, 13, session->usedspk_id);

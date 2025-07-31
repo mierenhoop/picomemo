@@ -21,11 +21,10 @@ dependencies on (any) libsignal or libolm code.
 
 Both OMEMO 0.3 (`eu.siacs.conversations.axolotl`) and OMEMO 0.9
 (`urn:xmpp:omemo:2`) are supported. By default OMEMO 0.3 is enabled and
-when compiled with `-DOMEMO2`, OMEMO 0.9 is enabled. That means only
-one is active at a time. It is possible to include both versions in a
-client by linking both separately as a shared library as is done in
-the Lua bindings, or by compiling with `-DOMEMO_EXPORT=static` and
-directly including `omemo.c` while somehow reexporting the API.
+when compiled with `-DOMEMO2`, OMEMO 0.9 is enabled. That means only one
+is active at a time. It is possible to include both versions in a client
+by compiling with `-DOMEMO_EXPORT=static` and directly including
+`omemo.c` while somehow reexporting the API.
 
 ### Crypto functions
 
@@ -40,11 +39,6 @@ also included as amalgamation in `/c25519.c` and `/c25519.h`. This
 library was designed for low-memory systems and is significantly slower
 on modern hardware than HACL\*.
 
-## `lomemo`
-
-In the `lua` subdirectory there are Lua bindings for this library. With
-support for Lua 5.1 up to at least Lua 5.4.
-
 ## Dependencies
 
 - MbedTLS 3.0+
@@ -53,8 +47,6 @@ support for Lua 5.1 up to at least Lua 5.4.
 
 - For testing & development: GNU Make, docker-compose, Python, openssl,
   rlwrap, socat, xxd, POSIX commands, ctags-exuberant
-
-- Lua 5.1-5.4 (for Lua bindings)
 
 ## Usage
 
@@ -124,7 +116,7 @@ class XmppClient {
                 session = {0}
                 bundlexml = FetchBundle(to_id, device_id)
 >               omemoInitiateSession(&session, &store, bundle.spks, bundle.spk, ...)
->               sessions.Set(to_jid, device_id, session)
+                sessions.Set(to_jid, device_id, session)
             }
 >           omemoEncryptKey(&session, &store, out key_msg, key_payload)
             headers.append(MakeXml(key_msg.isprekey, key_msg.p, key_msg.n))
@@ -177,6 +169,15 @@ class XmppClient {
 }
 
 ```
+
+### Security
+
+After calling any function of the API, the stack could be zeroized for
+extra security. This is *not* done by the library.
+
+Follow good practice rules as described in the OMEMO spec for advancing
+the ratchet timely
+[1](https://xmpp.org/extensions/xep-0384.html#:~:text=After%20receiving%20an%20OMEMOKeyExchange%20and%20successfully%20building%20a%20new%20session%2C%20the%20receiving%20device%20SHOULD%20automatically%20respond%20with%20an%20empty%20OMEMO%20message) [2](https://xmpp.org/extensions/xep-0384.html#:~:text=When%20a%20client%20receives%20the%20first%20message%20for%20a%20given%20ratchet%20key%20with%20a%20counter%20of%2053%20or%20higher%2C%20it%20MUST%20send%20a%20heartbeat%20message.).
 
 ### WASM
 
