@@ -25,7 +25,15 @@
 
 #include "o/store.inc"
 
-int omemoRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
+int omemoRandom(void *d, size_t n) {
+#ifndef __EMSCRIPTEN__
+  return getrandom(d, n, 0) != n;
+#else
+  for (int i = 0; i < n; i++)
+    ((uint8_t*)d)[i] = rand();
+  return 0;
+#endif
+}
 
 static void CopyHex(uint8_t *d, const char *hex) {
   int n = strlen(hex);
@@ -628,7 +636,9 @@ int main() {
   RunTest(TestRatchet);
   RunTest(TestDeriveChainKey);
   RunTest(TestSerialization);
+#ifndef __EMSCRIPTEN__
   RunTest(TestSessionIntegration);
+#endif
   RunTest(TestReceive);
   RunTest(TestSession);
   puts("All tests succeeded");

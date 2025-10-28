@@ -27,3 +27,12 @@ jobs:
         rm o/test-omemo
         MBED_VENDOR=mbedtls CC=aarch64-linux-gnu-gcc make o/test-omemo
         qemu-aarch64 o/test-omemo
+    - name: wasm
+      run: |
+        sudo apt install -y emscripten node
+        make -C mbedtls clean
+        emmake make -C mbedtls -j lib
+        make o/test-omemo
+        rm o/test-omemo
+        MBED_VENDOR=mbedtls emmake make o/test-omemo
+        node o/test-omemo
