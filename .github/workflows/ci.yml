@@ -13,6 +13,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: install
       run: |
+        sudo rm /var/lib/man-db/auto-update
         sudo apt-get update
         sudo apt-get install -y gcc python-is-python3 libmbedtls-dev make python3-venv
     - name: test
@@ -29,7 +30,7 @@ jobs:
         qemu-aarch64 o/test-omemo
     - name: wasm
       run: |
-        sudo apt install -y emscripten node
+        sudo apt install -y emscripten nodejs
         make -C mbedtls clean
         emmake make -C mbedtls -j lib
         make o/test-omemo
