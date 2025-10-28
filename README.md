@@ -189,9 +189,12 @@ Running the test suite does require some changes:
 - In `test/omemo.c`, `omemoRandom()` has to be implemented with `rand()`
   instead of `getrandom()`.
 
+- `apt install -y python3-jinja2`
+
 - `curl -LO
   "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2"
-  && tar -xjf mbedtls-3.6.4.tar.bz2 mbedtls` and compile using `emmake
+  && tar -xjf mbedtls-3.6.4.tar.bz2 --strip-components=1
+  --one-top-level=mbedtls` and compile using `emmake
   make -C mbedtls lib`.
 
 - Add `-I mbedtls/include` to `CFLAGS`, change `-lmbedcrypto` to

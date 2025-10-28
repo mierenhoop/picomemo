@@ -1,4 +1,4 @@
-#ifndef __EMSCRIPTEN__
+#ifdef __x86_64__
 #define HACL_CAN_COMPILE_INTRINSICS 1
 #endif
 #define HACL_CAN_COMPILE_UINT128 1

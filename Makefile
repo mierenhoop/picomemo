@@ -9,6 +9,15 @@ ALLBINS=o/test-xmpp \
 		o/im \
 		o/generate
 
+ifdef MBED_VENDOR
+MBED_FLAGS=$(MBED_VENDOR)/library/libmbedtls.a    \
+           $(MBED_VENDOR)/library/libmbedcrypto.a \
+           $(MBED_VENDOR)/library/libmbedx509.a   \
+        -I $(MBED_VENDOR)/include
+else
+MBED_FLAGS=-lmbedtls -lmbedcrypto -lmbedx509
+endif
+
 DEPS=$(ALLBINS:%=%.d)
 
 all: $(ALLBINS) tags
@@ -22,16 +31,16 @@ o:
 	mkdir -p o
 
 o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
-	$(CC) -o $@ test/xmpp.c example/yxml.c  $(CFLAGS) -Iexample -lmbedcrypto -lmbedtls -lmbedx509
+	$(CC) -o $@ test/xmpp.c example/yxml.c  $(CFLAGS) -Iexample $(MBED_FLAGS)
 
 o/test-omemo: test/omemo.c c25519.c hacl.c omemo.c o/store.inc o/msg.bin
-	$(CC) -o $@ test/omemo.c c25519.c hacl.c $(CFLAGS) -DOMEMO_EXPORT=static -lmbedcrypto
+	$(CC) -o $@ test/omemo.c c25519.c hacl.c $(CFLAGS) -DOMEMO_EXPORT=static -static $(MBED_FLAGS)
 
 o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | o/store.inc test/cacert.inc
-	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE -lmbedcrypto -lmbedtls -lmbedx509 -lsqlite3
+	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE $(MBED_FLAGS) -lsqlite3
 
 o/generate: test/generate.c $(OMEMOSRCS)
-	$(CC) -o $@ $^ $(CFLAGS) -lmbedcrypto
+	$(CC) -o $@ $^ $(CFLAGS) $(MBED_FLAGS)
 
 o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv/
 	PYTHONPATH=o ./test/bot-venv/bin/python test/initsession.py
