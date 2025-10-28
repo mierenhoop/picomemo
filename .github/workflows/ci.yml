@@ -36,4 +36,4 @@ jobs:
         make o/test-omemo
         rm o/test-omemo
         MBED_VENDOR=mbedtls emmake make o/test-omemo
-        node o/test-omemo
+        node o/test-omemo --no-experimental-fetch
