@@ -1,4 +1,7 @@
-CFLAGS+=-g -Wall -Wno-pointer-sign -I. -MMD -MP
+ifndef CFLAGS
+CFLAGS+=-g
+endif
+CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP
 
 OMEMOSRCS=c25519.c hacl.c omemo.c
 XMPPSRCS=example/xmpp.c example/yxml.c
