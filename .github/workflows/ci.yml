@@ -34,6 +34,5 @@ jobs:
         make -C mbedtls clean
         emmake make -C mbedtls -j lib
         rm o/test-omemo
-        MBED_VENDOR=mbedtls emmake make o/test-omemo
-        # TODO: this does not work on ubuntu-latest, but does on debian trixie
-        # node o/test-omemo
+        MBED_VENDOR=mbedtls CFLAGS="-Os -flto -s SINGLE_FILE=1" emmake make o/test-omemo
+        node o/test-omemo

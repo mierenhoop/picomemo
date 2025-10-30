@@ -57,6 +57,32 @@ test/cacert.inc: test/localhost.crt
 o/store.inc o/bundle.py: o/generate
 	o/generate o/store.inc o/bundle.py
 
+# TODO: checksum
+mbedtls.tar.bz2:
+	curl -Lo $@ "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2"
+
+mbedtls: mbedtls.tar.bz2
+	rm -rf $@
+	tar -xjf $< --strip-components=1 --one-top-level=$@
+
+### WASM ###
+
+mbedtls/library/libmbedcrypto.a: | mbedtls
+	emmake make -C mbedtls/library clean
+	emmake make -C mbedtls/library -j libmbedcrypto.a
+
+o/omemo.js: wasm.c omemo.c hacl.c mbedtls/library/libmbedcrypto.a
+	emcc -o $@ wasm.c -Os -flto --no-entry \
+		-s SINGLE_FILE=1 \
+		-I mbedtls/include mbedtls/library/libmbedcrypto.a \
+		-s EXPORTED_FUNCTIONS=_malloc,_free --js-library omemo.js
+
+.PHONY: test-wasm
+test-wasm: o/omemo.js
+	node test/wasm.js
+
+### ESP32 ###
+
 ESP_DEV?=/dev/ttyUSB0
 
 ifneq (,$(wildcard $(ESP_DEV)))
@@ -85,6 +111,8 @@ esp-console:
 esp-monitor:
 	$(ESPIDF_DOCKERCMD) monitor
 
+### TESTS ###
+
 .PHONY: test-xmpp
 test-xmpp: o/test-xmpp
 	./o/test-xmpp
@@ -92,6 +120,8 @@ test-xmpp: o/test-xmpp
 .PHONY: test-omemo
 test-omemo: o/test-omemo
 	./o/test-omemo
+
+### INTEGRATION ###
 
 define IM_INPUT
 /login admin@localhost
