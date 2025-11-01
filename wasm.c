@@ -14,23 +14,24 @@
 //
 // TODO: implement En/DecryptMessage in js
 
-//extern int omemoJsLoadMessageKey(int,int,int,int);
-//extern int omemoJsStoreMessageKey(int,int,int,int,int);
 extern void omemoJsRandom(int,int);
 
 // When omemoStoreMessageKey is called and !g_skipbuf then g_nskip will
 // contain amount of to-be-stored keys and omemoDecryptKey will return
 // with user error. Now the JS caller will allocate and set g_skipbuf
 // with enough space to hold g_nskip keys.
-static uint64_t g_nskip;
-static struct omemoMessageKey *g_skipbuf;
+EX uint64_t g_nskip;
+EX struct omemoMessageKey *g_skipbuf;
+
+EX void set_skipbuf(void *p) { g_skipbuf = p; }
 
 // When omemoLoadMessageKey is called g_loadkey is set to the key arg
 // and return with user error. The JS caller will put the mk into
 // g_loadkey and call omemoDecryptKey again.
 // TODO: what if key not found??
-static bool g_suppliedkey;
-static struct omemoMessageKey g_loadkey;
+EX bool g_triedload;
+EX bool g_suppliedkey;
+EX struct omemoMessageKey g_loadkey;
 
 // TODO: simplify, just only have extern??
 int omemoRandom(void *p, size_t n) {
@@ -41,16 +42,19 @@ int omemoRandom(void *p, size_t n) {
 // TODO: don't need EMSCRIPTEN_KEEPALIVE for these two, we should probably say something like OMEMO_USER instead of OMEMO_EXPORT for these
 int omemoLoadMessageKey(struct omemoSession *s,
                                      struct omemoMessageKey *k) {
-  if (g_suppliedkey) {
-    memcpy(g_loadkey.mk, k->mk, 32);
-    g_suppliedkey = false;
-    return 0;
-  } else {
+  if (!g_triedload) {
     g_loadkey.nr = k->nr;
     memcpy(g_loadkey.dh, k->dh, 32);
+    return OMEMO_EUSER;
+  }
+  assert(k->nr == g_loadkey.nr);
+  assert(!memcmp(k->dh, g_loadkey.dh, 32));
+  if (g_suppliedkey) {
+    memcpy(g_loadkey.mk, k->mk, 32);
+    return 0;
+  } else {
     return 1;
   }
-  //return omemoJsLoadMessageKey(k->nr, (int)k->dh, (int)k->mk, (int)s);
 }
 
 int omemoStoreMessageKey(struct omemoSession *s,
@@ -60,7 +64,7 @@ int omemoStoreMessageKey(struct omemoSession *s,
     memcpy(k, g_skipbuf+(g_nskip - n), sizeof(*k));
     return 0;
   }
-  return OMEMO_EUSER-1;
+  return OMEMO_EUSER;
 }
 
 EX int get_sessionsize   (void) { return sizeof(struct omemoSession   ); }
@@ -70,6 +74,7 @@ EX int get_keymessagesize(void) { return sizeof(struct omemoKeyMessage); }
 EX int get_numprekeys    (void) { return OMEMO_NUMPREKEYS              ; }
 
 EX uint8_t *get_mk_dh(struct omemoMessageKey *mk) { return mk->dh; }
+EX uint8_t *get_mk_mk(struct omemoMessageKey *mk) { return mk->mk; }
 EX uint32_t get_mk_nr(struct omemoMessageKey *mk) { return mk->nr; }
 // For heartbeat
 EX uint32_t get_session_nr(struct omemoSession *s) { return s->state.nr; }
@@ -86,9 +91,6 @@ EX uint32_t get_store_spk_id(struct omemoStore *s) { return s->cursignedprekey.i
 EX uint32_t get_store_pk_id(struct omemoStore *s, int i) { return s->prekeys[i].id; }
 EX uint8_t *get_store_pk   (struct omemoStore *s, int i) { return s->prekeys[i].kp.pub; }
 
-EX
-void FillMessageKey(struct omemoMessageKey *k, uint32_t nr, omemoKey dh, omemoKey mk) {
-  k->nr = nr;
-  memcpy(k->dh, dh, 32);
+EX void set_mk_mk(struct omemoMessageKey *k, omemoKey mk) {
   memcpy(k->mk, mk, 32);
 }

@@ -132,16 +132,58 @@ class Session {
       // It's little endian so it's no problem either way (4 vs 8)
       keysizep: 8,
     }, ({msgp, key, keysizep}, resolve) => {
-      omemo.HEAPU8[keysizep] = keysize
-      handleRet(omemo._omemoDecryptKey(this.session, store.store, key, keysizep, prekey ? 1 : 0, msgp, msg.length))
-      // TODO: do something with new keysize
-      return resolve(key)
+      omemo.HEAPU8[omemo._g_triedload] = 0
+      let dec = () => {
+        omemo.HEAPU8[keysizep] = keysize
+        return omemo._omemoDecryptKey(this.session, store.store, key, keysizep, prekey ? 1 : 0, msgp, msg.length)
+      }
+      let r = dec()
+      // TODO: don't hardcode OMEMO_EUSER, also have error enum in JS
+      if (r != -7) {
+        throw "omemo: unreachable code path"
+      }
+      let dh = omemo._get_mk_dh(omemo._g_loadkey)
+      let nr = omemo._get_mk_nr(omemo._g_loadkey)
+      let mk = this.loadKey(dh, nr)
+      if (mk) {
+        malloced({mk},({mk})=>omemo._set_mk_mk(omemo._g_loadkey, mk))
+        omemo.HEAPU8[omemo._g_suppliedkey] = 1
+      } else {
+        omemo.HEAPU8[omemo._g_suppliedkey] = 0
+      }
+      omemo.HEAPU8[omemo._g_triedload] = 1
+      omemo.HEAPU8[omemo._g_skipbuf] = 0
+      r = dec()
+      if (r == -7) {
+        let mksize = omemo._get_messagekeysize()
+        let n = omemo.HEAPU64[omemo._g_nskip]
+        malloced({buf: n * mksize}, ({buf}) => {
+          omemo._set_skipbuf(buf)
+          handleRet(dec())
+          let keys = []
+          for (let i = 0; i < n; i++) {
+            keys.push({
+              dh: getSlice(omemo._get_mk_dh(buf+i*mksize), 32),
+              mk: getSlice(omemo._get_mk_mk(buf+i*mksize), 32),
+              nr: omemo._get_mk_nr(buf+i*mksize),
+            })
+          }
+          this.storeKeys(keys)
+        })
+      } else {
+        handleRet(r)
+      }
+      return getSlice(key, omemo.HEAPU8[keysizep])
     })
   }
 
   // You probaly don't have to free a Session or Store at all because in the
   // intended usecase you rarely destroy sessions anyways
   free() { omemo._free(this.session) }
+
+  // Override these
+  loadKey(dh, nr) {console.log("Tried loading")}
+  storeKeys(keys) {console.log("Storing keys: " + keys.length)}
 }
 
 function toBuf(b) {
