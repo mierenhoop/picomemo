@@ -1,10 +1,11 @@
-let assert = require('node:assert');
+let assert = require("node:assert");
 let omemo = require("../o/omemo.js")
+let crypto = require("node:crypto")
 
 function malloc(n) {
   let p = omemo._malloc(n)
   if (p == 0) throw "malloc fail"
-  console.log("Alloced: " + n)
+  //console.log("Alloced: " + n)
   return p
 }
 
@@ -31,24 +32,24 @@ function toSerKey(p) {
 
 class Store {
   constructor() {
-    this.store = calloc(omemo._get_storesize())
+    this.ptr = calloc(omemo._get_storesize())
   }
 
-  setup() { handleRet(omemo._omemoSetupStore(this.store)) }
+  setup() { handleRet(omemo._omemoSetupStore(this.ptr)) }
 
   deserialize(ser) {
     malloced({
       s: ser
     }, ({s}) => {
-      handleRet(omemo._omemoDeserializeStore(s, ser.length, this.store))
+      handleRet(omemo._omemoDeserializeStore(s, ser.length, this.ptr))
     })
   }
 
   serialize() {
     return malloced({
-      d: omemo._omemoGetSerializedStoreSize(this.store)
+      d: omemo._omemoGetSerializedStoreSize(this.ptr)
     }, ({d}, resolve) => {
-      omemo._omemoSerializeStore(d, this.store)
+      omemo._omemoSerializeStore(d, this.ptr)
       return resolve(d)
     })
   }
@@ -57,63 +58,63 @@ class Store {
     let n = omemo._get_numprekeys()
     let prekeys = []
     for (let i = 0; i < n; i++) {
-      let id = omemo._get_store_pk_id(this.store, i)
+      let id = omemo._get_store_pk_id(this.ptr, i)
       if (id != 0) prekeys.push({
         id,
-        key: toSerKey(omemo._get_store_pk(this.store, i)),
+        key: toSerKey(omemo._get_store_pk(this.ptr, i)),
       })
     }
     return {
-      ik:   toSerKey(omemo._get_store_ik(this.store)),
-      spk:  toSerKey(omemo._get_store_spk(this.store)),
-      spks: getSlice(omemo._get_store_spks(this.store), 64),
-      spk_id: omemo._get_store_spk_id(this.store),
+      ik:   toSerKey(omemo._get_store_ik(this.ptr)),
+      spk:  toSerKey(omemo._get_store_spk(this.ptr)),
+      spks: getSlice(omemo._get_store_spks(this.ptr), 64),
+      spk_id: omemo._get_store_spk_id(this.ptr),
       prekeys,
     }
   }
 
-  free() { omemo._free(this.store) }
+  free() { omemo._free(this.ptr) }
 }
 
-// TODO: store in session?
 class Session {
-  constructor() {
-    this.session = calloc(omemo._get_sessionsize())
+  constructor(store) {
+    this.store = store
+    this.ptr = calloc(omemo._get_sessionsize())
   }
 
   deserialize(ser) {
     malloced({
       s: ser
     }, ({s}) => {
-      handleRet(omemo._omemoDeserializeSession(s, ser.length, this.session))
+      handleRet(omemo._omemoDeserializeSession(s, ser.length, this.ptr))
     })
   }
 
   serialize() {
     return malloced({
-      d: omemo._omemoGetSerializedSessionSize(this.session)
+      d: omemo._omemoGetSerializedSessionSize(this.ptr)
     }, ({d}, resolve) => {
-      omemo._omemoSerializeSession(d, this.session)
+      omemo._omemoSerializeSession(d, this.ptr)
       return resolve(d)
     })
   }
 
-  initiateSession(store, {
+  initiateSession({
     spks, spk, ik, pk, spk_id, pk_id,
   }) {
     malloced({spks,spk,ik,pk},({spks,spk,ik,pk})=> {
-      handleRet(omemo._omemoInitiateSession(this.session, store.store,
+      handleRet(omemo._omemoInitiateSession(this.ptr, this.store.ptr,
         spks, spk, ik, pk, spk_id, pk_id
       ))
     })
   }
 
-  encryptKey(store, key) {
+  encryptKey(key) {
     return malloced({
       msg: omemo._get_keymessagesize(),
       k: key,
     }, ({msg,k}) => {
-      handleRet(omemo._omemoEncryptKey(this.session, store.store, msg, k, key.length))
+      handleRet(omemo._omemoEncryptKey(this.ptr, this.store.ptr, msg, k, key.length))
       return {
         msg: getSlice(omemo._get_km_p(msg),
                       omemo._get_km_n(msg)),
@@ -122,7 +123,7 @@ class Session {
     })
   }
 
-  decryptKey(store, prekey, msg) {
+  decryptKey(prekey, msg) {
     // for oldmemo
     let keysize = 32
     return malloced({
@@ -135,14 +136,14 @@ class Session {
       omemo.HEAPU8[omemo._g_triedload] = 0
       let dec = () => {
         omemo.HEAPU8[keysizep] = keysize
-        return omemo._omemoDecryptKey(this.session, store.store, key, keysizep, prekey ? 1 : 0, msgp, msg.length)
+        return omemo._omemoDecryptKey(this.ptr, this.store.ptr, key, keysizep, prekey ? 1 : 0, msgp, msg.length)
       }
       let r = dec()
       // TODO: don't hardcode OMEMO_EUSER, also have error enum in JS
       if (r != -7) {
         throw "omemo: unreachable code path"
       }
-      let dh = omemo._get_mk_dh(omemo._g_loadkey)
+      let dh = getSlice(omemo._get_mk_dh(omemo._g_loadkey), 32)
       let nr = omemo._get_mk_nr(omemo._g_loadkey)
       let mk = this.loadKey(dh, nr)
       if (mk) {
@@ -156,7 +157,7 @@ class Session {
       r = dec()
       if (r == -7) {
         let mksize = omemo._get_messagekeysize()
-        let n = omemo.HEAPU64[omemo._g_nskip]
+        let n = omemo._get_nskip()
         malloced({buf: n * mksize}, ({buf}) => {
           omemo._set_skipbuf(buf)
           handleRet(dec())
@@ -177,13 +178,30 @@ class Session {
     })
   }
 
-  // You probaly don't have to free a Session or Store at all because in the
+  // You probably don't have to free a Session or Store at all because in the
   // intended usecase you rarely destroy sessions anyways
-  free() { omemo._free(this.session) }
+  free() { omemo._free(this.ptr) }
 
   // Override these
-  loadKey(dh, nr) {console.log("Tried loading")}
-  storeKeys(keys) {console.log("Storing keys: " + keys.length)}
+  loadKey(dh, nr) {}
+  storeKeys(keys) {}
+}
+
+function hashmk(dh, nr) {
+  return dh.toString()+nr
+}
+
+class MySession extends Session {
+  keys = new Map
+  loadKey(dh, nr) {
+    let mk = this.keys.get(hashmk(dh, nr))
+    return mk
+  }
+  storeKeys(keys) {
+    for (let {dh,nr,mk} of keys) {
+      this.keys.set(hashmk(dh, nr), mk)
+    }
+  }
 }
 
 function toBuf(b) {
@@ -216,7 +234,7 @@ function malloced(m, cb) {
   } finally {
     for (let p of Object.values(allocs)) {
       omemo._free(p)
-      console.log("Freed: " + pton[p])
+      //console.log("Freed: " + pton[p])
     }
   }
 }
@@ -269,8 +287,8 @@ omemo.onRuntimeInitialized = () => {
   store1.setup()
   store2.setup()
 
-  let session1 = new Session()
-  let session2 = new Session()
+  let session1 = new MySession(store1)
+  let session2 = new MySession(store2)
 
   let bundle = store1.getBundle()
   let pk = getRandomPrekey(bundle.prekeys)
@@ -278,12 +296,42 @@ omemo.onRuntimeInitialized = () => {
   bundle.pk = pk.key
   bundle.pk_id = pk.id
 
-  session2.initiateSession(store2, bundle)
+  session2.initiateSession(bundle)
+
+  let msgs = []
+
+  let send = (s, id) => {
+    // TODO: don't hardcode 32 (OMEMO_KEYSIZE)
+    let key = crypto.getRandomValues(new Uint8Array(32))
+    msgs[id] = s.encryptKey(key)
+    msgs[id].key = key
+  }
+
+  let recv = (s, id) => {
+    let key = s.decryptKey(msgs[id].prekey, msgs[id].msg)
+    assert.equal(key.toString(), msgs[id].key.toString())
+  }
+
+  send(session2, 0)
+  recv(session1, 0)
+
+  send(session1, 1)
+  recv(session2, 1)
+
+  send(session1, 2)
+  recv(session2, 2)
+
+  send(session1, 3)
+  send(session1, 4)
+
+  recv(session2, 4)
+
+  recv(session2, 3)
 
   let plain = "Hello"
   let enc = encryptMessage(toBuf("Hello"))
-  let {prekey, msg} = session2.encryptKey(store2, enc.key)
-  let key = session1.decryptKey(store1, prekey, msg)
+  let {prekey, msg} = session2.encryptKey(enc.key)
+  let key = session1.decryptKey(prekey, msg)
   //store.free()
 
   assert.equal(new TextDecoder().decode(decryptMessage(key, enc.iv, enc.payload)), plain)

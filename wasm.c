@@ -22,7 +22,7 @@ extern void omemoJsRandom(int,int);
 // with enough space to hold g_nskip keys.
 EX uint64_t g_nskip;
 EX struct omemoMessageKey *g_skipbuf;
-
+EX uint64_t get_nskip() { return g_nskip; }
 EX void set_skipbuf(void *p) { g_skipbuf = p; }
 
 // When omemoLoadMessageKey is called g_loadkey is set to the key arg
@@ -50,7 +50,7 @@ int omemoLoadMessageKey(struct omemoSession *s,
   assert(k->nr == g_loadkey.nr);
   assert(!memcmp(k->dh, g_loadkey.dh, 32));
   if (g_suppliedkey) {
-    memcpy(g_loadkey.mk, k->mk, 32);
+    memcpy(k->mk, g_loadkey.mk, 32);
     return 0;
   } else {
     return 1;
@@ -61,10 +61,12 @@ int omemoStoreMessageKey(struct omemoSession *s,
                                       const struct omemoMessageKey *k,
                                       uint64_t n) {
   if (g_skipbuf) {
-    memcpy(k, g_skipbuf+(g_nskip - n), sizeof(*k));
+    memcpy(g_skipbuf+(g_nskip - n), k, sizeof(*k));
     return 0;
+  } else {
+    g_nskip = n;
+    return OMEMO_EUSER;
   }
-  return OMEMO_EUSER;
 }
 
 EX int get_sessionsize   (void) { return sizeof(struct omemoSession   ); }
