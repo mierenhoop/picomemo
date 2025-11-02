@@ -276,6 +276,42 @@ function decryptMessage(key, iv, payload) {
   })
 }
 
+async function encrypt(payload) {
+  let crypkey = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 128 },
+    true,
+    ["encrypt"],
+  )
+  let iv = crypto.getRandomValues(new Uint8Array(12))
+  let opts = { name: "AES-GCM", iv }
+  let enc = await crypto.subtle.encrypt(opts, crypkey, payload)
+  enc = new Uint8Array(enc)
+  crypkey = new Uint8Array(await crypto.subtle.exportKey("raw", crypkey))
+  let key = new Uint8Array(32)
+  key.set(crypkey)
+  key.set(enc.slice(enc.length-16), 16)
+  return {
+    key,
+    iv,
+    payload: enc.slice(0, enc.length - 16),
+  }
+}
+
+async function decrypt(key, iv, payload) {
+  let crypkey = await crypto.subtle.importKey(
+    "raw",
+    key.slice(0,16),
+    "AES-GCM",
+    false,
+    ["decrypt"],
+  )
+  let pay = new Uint8Array(payload.length + 16)
+  pay.set(payload)
+  pay.set(key.slice(16,32), payload.length)
+  let opts = { name: "AES-GCM", iv }
+  return await crypto.subtle.decrypt(opts, crypkey, pay)
+}
+
 function getRandomPrekey(prekeys) {
   return prekeys.length > 0 ?
     prekeys[(Math.random()*prekeys.length) | 0] : null
@@ -329,12 +365,12 @@ omemo.onRuntimeInitialized = () => {
   recv(session2, 3)
 
   let plain = "Hello"
-  let enc = encryptMessage(toBuf("Hello"))
-  let {prekey, msg} = session2.encryptKey(enc.key)
-  let key = session1.decryptKey(prekey, msg)
-  //store.free()
-
-  assert.equal(new TextDecoder().decode(decryptMessage(key, enc.iv, enc.payload)), plain)
-
-  console.log("Test successful")
+  encrypt(toBuf(plain)).then(enc=>{
+    let {prekey, msg} = session2.encryptKey(enc.key)
+    let key = session1.decryptKey(prekey, msg)
+    decrypt(key, enc.iv, enc.payload).then(o=>{
+      assert.equal(new TextDecoder().decode(o), plain)
+      console.log("Test successful")
+    })
+  })
 }

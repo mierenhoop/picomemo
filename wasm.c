@@ -3,6 +3,17 @@
 #include <stdlib.h>
 #include <stddef.h>
 
+// Declare them as static so that EMSCRIPTEN_KEEPALIVE does not apply.
+// They are implemented in JS, which is faster and saves ~50K from the
+// WASM binary.
+
+static int omemoEncryptMessage(uint8_t *d, uint8_t payload[32],
+                               uint8_t iv[12], const uint8_t *s,
+                               size_t n);
+static int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
+                               size_t pn, const uint8_t iv[12],
+                               const uint8_t *s, size_t n);
+
 #define OMEMO_EXPORT EMSCRIPTEN_KEEPALIVE
 #include "omemo.h"
 #include "omemo.c"
@@ -10,11 +21,13 @@
 
 #define EX EMSCRIPTEN_KEEPALIVE
 
-// rm -f o/test-omemo* && CFLAGS="-Os -s -flto -DOMEMO2 -s EXPORTED_FUNCTIONS=_malloc,_main" MBED_VENDOR=mbedtls emmake make o/test-omemo && ls -lah o/test-omemo.wasm
-//
-// TODO: implement En/DecryptMessage in js
-
-extern void omemoJsRandom(int,int);
+int omemoRandom(void *p, size_t n) {
+  EM_ASM({
+    HEAPU8.set((typeof crypto=="undefined"?require("node:crypto"):crypto)
+        .getRandomValues(new Uint8Array($1)),$0)
+  }, p, n);
+  return 0;
+}
 
 // When omemoStoreMessageKey is called and !g_skipbuf then g_nskip will
 // contain amount of to-be-stored keys and omemoDecryptKey will return
@@ -28,18 +41,10 @@ EX void set_skipbuf(void *p) { g_skipbuf = p; }
 // When omemoLoadMessageKey is called g_loadkey is set to the key arg
 // and return with user error. The JS caller will put the mk into
 // g_loadkey and call omemoDecryptKey again.
-// TODO: what if key not found??
 EX bool g_triedload;
 EX bool g_suppliedkey;
 EX struct omemoMessageKey g_loadkey;
 
-// TODO: simplify, just only have extern??
-int omemoRandom(void *p, size_t n) {
-  omemoJsRandom((int)p, (int)n);
-  return 0;
-}
-
-// TODO: don't need EMSCRIPTEN_KEEPALIVE for these two, we should probably say something like OMEMO_USER instead of OMEMO_EXPORT for these
 int omemoLoadMessageKey(struct omemoSession *s,
                                      struct omemoMessageKey *k) {
   if (!g_triedload) {

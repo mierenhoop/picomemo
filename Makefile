@@ -72,11 +72,10 @@ mbedtls/library/libmbedcrypto.a: | mbedtls
 	emmake make -C mbedtls/library -j libmbedcrypto.a
 
 o/omemo.js: wasm.c omemo.c hacl.c mbedtls/library/libmbedcrypto.a
-	emcc -o $@ wasm.c -Os -flto --no-entry \
+	emcc -o $@ wasm.c -O3 -flto --no-entry \
 		-Wall -Wno-pointer-sign -Wno-unused-function \
-		-s SINGLE_FILE=1 \
 		-I mbedtls/include mbedtls/library/libmbedcrypto.a \
-		-s EXPORTED_FUNCTIONS=_malloc,_free --js-library omemo.js
+		-sEXPORTED_FUNCTIONS=_malloc,_free -sSINGLE_FILE=1
 
 .PHONY: test-wasm
 test-wasm: o/omemo.js
