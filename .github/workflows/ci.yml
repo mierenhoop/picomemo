@@ -35,4 +35,4 @@ jobs:
         emmake make -C mbedtls -j lib
         rm o/test-omemo
         MBED_VENDOR=mbedtls CFLAGS="-Os -flto -s SINGLE_FILE=1" emmake make o/test-omemo
-        node o/test-omemo
+        node --experimental-global-webcrypto o/test-omemo

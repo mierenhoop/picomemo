@@ -23,8 +23,7 @@ static int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
 
 int omemoRandom(void *p, size_t n) {
   EM_ASM({
-    HEAPU8.set((typeof crypto=="undefined"?require("node:crypto"):crypto)
-        .getRandomValues(new Uint8Array($1)),$0)
+    HEAPU8.set(crypto.getRandomValues(new Uint8Array($1)), $0)
   }, p, n);
   return 0;
 }

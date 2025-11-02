@@ -71,15 +71,25 @@ mbedtls/library/libmbedcrypto.a: | mbedtls
 	emmake make -C mbedtls/library clean
 	emmake make -C mbedtls/library -j libmbedcrypto.a
 
-o/omemo.js: wasm.c omemo.c hacl.c mbedtls/library/libmbedcrypto.a
+# TODO: sed hack for emscripten bug on debian 12
+o/wasm.js: wasm.c omemo.c hacl.c mbedtls/library/libmbedcrypto.a | o
 	emcc -o $@ wasm.c -O3 -flto --no-entry \
 		-Wall -Wno-pointer-sign -Wno-unused-function \
 		-I mbedtls/include mbedtls/library/libmbedcrypto.a \
-		-sEXPORTED_FUNCTIONS=_malloc,_free -sSINGLE_FILE=1
+		-sEXPORTED_FUNCTIONS=_malloc,_free -sSINGLE_FILE=1 \
+		-sMODULARIZE -sEXPORT_ES6 --minify 0
+	sed -i s/__dirname/import.meta.dirname/ $@
 
 .PHONY: test-wasm
-test-wasm: o/omemo.js
-	node test/wasm.js
+test-wasm: o/omemo.min.js
+	@echo '{"type":"module"}' > o/package.json
+	@echo Running wasm test
+	@sh -c 'cd test; cat wasm.js | node --experimental-global-webcrypto --input-type=module --trace-uncaught --enable-source-maps'
+
+# TODO: emscripten emits node requires
+o/omemo.min.js: o/wasm.js wasm.js
+	esbuild --minify --format=esm --bundle wasm.js --outfile=$@ \
+		--external:path --external:fs --sourcemap
 
 ### ESP32 ###
 
