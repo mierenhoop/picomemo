@@ -653,11 +653,13 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
   if (!session || !store || !msg || pn > OMEMO_MAXPAYLOAD)
     return OMEMO_EPARAM;
   int r;
-  struct omemoState backup;
-  memcpy(&backup, &session->state, sizeof(struct omemoState));
+  // Fields outside of session->state are not modified in
+  // EncryptKeyImpl() but we'll back them up to save a future headache.
+  struct omemoSession backup;
+  memcpy(&backup, session, sizeof(struct omemoSession));
   memset(msg, 0, sizeof(struct omemoKeyMessage));
   if ((r = EncryptKeyImpl(session, store, msg, payload, pn))) {
-    memcpy(&session->state, &backup, sizeof(struct omemoState));
+    memcpy(session, &backup, sizeof(struct omemoSession));
     memset(msg, 0, sizeof(struct omemoKeyMessage));
   }
   return r;
@@ -752,7 +754,7 @@ OMEMO_EXPORT int omemoInitiateSession(struct omemoSession *session,
   return 0;
 }
 
-static struct omemoPreKey *FindPreKey(struct omemoStore *store,
+static const struct omemoPreKey *FindPreKey(const struct omemoStore *store,
                                       uint32_t pk_id) {
   for (int i = 0; i < OMEMO_NUMPREKEYS; i++) {
     if (store->prekeys[i].id == pk_id)
@@ -933,11 +935,11 @@ static int DecryptKeyImpl(struct omemoSession *session,
 }
 
 static int DecryptGenericKeyImpl(struct omemoSession *session,
-                                 struct omemoStore *store,
+                                 const struct omemoStore *store,
                                  uint8_t *payload, size_t *pn,
                                  bool isprekey, const uint8_t *msg,
                                  size_t msgn) {
-  struct omemoPreKey *pk = NULL;
+  const struct omemoPreKey *pk = NULL;
   if (isprekey) {
     // Can't receive prekey when we sent a prekey...
     if (session->init == SESSION_INIT)
@@ -1014,12 +1016,15 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  size_t msgn) {
   if (!session || !store || !payload || !pn || !store->init || !msg)
     return OMEMO_EPARAM;
-  struct omemoState backup;
-  memcpy(&backup, &session->state, sizeof(struct omemoState));
+  // We only have to backup session->state functionality wise, but to
+  // ensure session stays the same before and after an error we backup
+  // everything.
+  struct omemoSession backup;
+  memcpy(&backup, session, sizeof(struct omemoSession));
   int r;
   if ((r = DecryptGenericKeyImpl(session, store, payload, pn, isprekey,
                                  msg, msgn))) {
-    memcpy(&session->state, &backup, sizeof(struct omemoState));
+    memcpy(session, &backup, sizeof(struct omemoSession));
   }
   return r;
 }
