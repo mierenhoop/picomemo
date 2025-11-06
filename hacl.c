@@ -2,6 +2,12 @@
 #define HACL_CAN_COMPILE_INTRINSICS 1
 #endif
 #define HACL_CAN_COMPILE_UINT128 1
+
+#define KRML_HOST_PRINTF(...) (void)0
+#define KRML_HOST_EPRINTF(...) (void)0
+
+// Start of amalgamation
+
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
    Licensed under the Apache 2.0 and MIT Licenses. */
 
