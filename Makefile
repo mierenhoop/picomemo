@@ -1,4 +1,7 @@
-CFLAGS+=-g -Wall -Wno-pointer-sign -I. -MMD -MP
+ifndef CFLAGS
+CFLAGS+=-g
+endif
+CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP
 
 OMEMOSRCS=c25519.c hacl.c omemo.c
 XMPPSRCS=example/xmpp.c example/yxml.c
@@ -54,6 +57,20 @@ test/cacert.inc: test/localhost.crt
 o/store.inc o/bundle.py: o/generate
 	o/generate o/store.inc o/bundle.py
 
+### MBEDTLS VENDORING ###
+
+CKSUM=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110
+.DELETE_ON_ERROR: mbedtls.tar.bz2
+mbedtls.tar.bz2:
+	curl -Lo $@ "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2"
+	echo "$(CKSUM) mbedtls.tar.bz2" | sha256sum -c
+
+mbedtls: mbedtls.tar.bz2
+	rm -rf $@
+	tar -xjf $< --strip-components=1 --one-top-level=$@
+
+### ESP32 ###
+
 ESP_DEV?=/dev/ttyUSB0
 
 ifneq (,$(wildcard $(ESP_DEV)))
@@ -82,6 +99,8 @@ esp-console:
 esp-monitor:
 	$(ESPIDF_DOCKERCMD) monitor
 
+### TESTS ###
+
 .PHONY: test-xmpp
 test-xmpp: o/test-xmpp
 	./o/test-xmpp
@@ -89,6 +108,8 @@ test-xmpp: o/test-xmpp
 .PHONY: test-omemo
 test-omemo: o/test-omemo
 	./o/test-omemo
+
+### INTEGRATION ###
 
 define IM_INPUT
 /login admin@localhost
@@ -132,6 +153,6 @@ tags:
 
 .PHONY: clean
 clean:
-	rm -rf o
+	rm -rf o mbedtls
 
 -include $(DEPS)

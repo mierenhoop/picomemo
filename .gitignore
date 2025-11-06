@@ -3,3 +3,5 @@
 /test/bot-venv/
 /example/esp-im/config.h
 __pycache__
+/mbedtls
+/mbedtls.tar.bz2

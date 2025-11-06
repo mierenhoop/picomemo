@@ -322,7 +322,7 @@ static void RemoveSkippedKey(int i) {
   mkskippedi--;
 }
 
-int omemoLoadMessageKey(struct omemoSession *, struct omemoMessageKey *k) {
+int omemoLoadMessageKey(struct omemoSession *s, struct omemoMessageKey *k) {
   for (int i = 0; i < mkskippedi; i++) {
     struct omemoMessageKey *sk = &mkskipped[i];
     if (k->nr == sk->nr && !memcmp(k->dh, sk->dh, 32)) {
@@ -334,7 +334,7 @@ int omemoLoadMessageKey(struct omemoSession *, struct omemoMessageKey *k) {
   return 1;
 }
 
-int omemoStoreMessageKey(struct omemoSession *, const struct omemoMessageKey *k, uint64_t) {
+int omemoStoreMessageKey(struct omemoSession *s, const struct omemoMessageKey *k, uint64_t n) {
   if (mkskippedi >= MKSKIPPEDN)
     return OMEMO_EUSER;
   memcpy(&mkskipped[mkskippedi++], k, sizeof(*k));
@@ -576,6 +576,7 @@ static void TestSerialization() {
 }
 
 static void TestSessionIntegration() {
+#ifndef __EMSCRIPTEN__
   struct omemoSession session;
   struct omemoStore store;
   memset(&session, 0, sizeof(session));
@@ -608,6 +609,7 @@ static void TestSessionIntegration() {
   assert(f);
   assert(fwrite(msg.p, 1, msg.n, f) == msg.n);
   fclose(f);
+#endif
 }
 
 #define RunTest(t)                                                     \
@@ -636,9 +638,7 @@ int main() {
   RunTest(TestRatchet);
   RunTest(TestDeriveChainKey);
   RunTest(TestSerialization);
-#ifndef __EMSCRIPTEN__
   RunTest(TestSessionIntegration);
-#endif
   RunTest(TestReceive);
   RunTest(TestSession);
   puts("All tests succeeded");
