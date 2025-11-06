@@ -5,7 +5,7 @@ cryptography required for XMPP's OMEMO (E2EE).
 
 ### Features
 
-- Portable, besides x86 also runs on WASM, ARM and embedded systems like
+- Portable: besides x86 also runs on WASM, ARM and embedded systems like
   the ESP32!
 
 - Compatible with other XMPP clients that support OMEMO.

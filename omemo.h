@@ -61,8 +61,6 @@
 
 #endif
 
-#define OMEMO_MAXPAYLOAD OMEMO_KEYSIZE
-
 typedef uint8_t omemoKey[32];
 #ifdef OMEMO2
 typedef uint8_t omemoSerializedKey[32];
@@ -153,9 +151,7 @@ OMEMO_EXPORT int omemoStoreMessageKey(struct omemoSession *,
                                       uint64_t n);
 
 /**
- * Unimplemented random function.
- *
- * This function should be externally implemented.
+ * User supplied random function.
  *
  * @param p points to the to-be-filled array
  * @param n is the amount of random bytes which should be generated in p
@@ -267,7 +263,7 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
  */
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  struct omemoStore *store,
-                                 uint8_t *payload, size_t *pn,
+                                 uint8_t *key, size_t *keyn,
                                  bool isprekey, const uint8_t *msg,
                                  size_t msgn);
 
@@ -276,7 +272,7 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
 /**
  * Encrypt message which will be stored in the <payload> element.
  *
- * @param payload (out) will contain the encrypted
+ * @param key (out) will contain the encryption key
  * @param s is a mutable buffer containing the plaintext message with
  * `omemoGetMessagePadSize(n)` amount of bytes reserved at the end
  * @param d is the destination buffer that is the same size as s
@@ -284,18 +280,18 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[48],
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
                                      uint8_t *s, size_t n);
 #else
 /**
  * Encrypt message which will be stored in the <payload> element.
  *
- * @param payload (out) will contain the encrypted
+ * @param key (out) will contain the encryption key
  * @param n is the size of the buffer in d and s
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[32],
+OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n);
 #endif
@@ -304,28 +300,28 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t payload[32],
 /**
  * Decrypt message taken from the <payload> element.
  *
- * @param payload is the decrypted payload of the omemoKeyMessage
- * @param pn is the size of payload
+ * @param key is the decrypted key of the omemoKeyMessage
+ * @param keyn is the size of key
  * @param n is the size of the buffer in d and s
  *
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
-                                     const uint8_t *payload, size_t pn,
+                                     const uint8_t *key, size_t keyn,
                                      const uint8_t *s, size_t n);
 #else
 /**
  * Decrypt message taken from the <payload> element.
  *
- * @param payload is the decrypted payload of the omemoKeyMessage
- * @param pn is the size of payload, some clients might make the tag
+ * @param key is the decrypted key of the omemoKeyMessage
+ * @param keyn is the size of key, some clients might make the tag
  * larger than 16 bytes
  * @param n is the size of the buffer in d and s
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *payload,
-                                     size_t pn, const uint8_t iv[12],
+OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
+                                     size_t keyn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n);
 #endif
 
