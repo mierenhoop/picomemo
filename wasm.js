@@ -82,6 +82,8 @@ export class Store {
 }
 
 export class Session {
+  maxSkip = 100
+
   constructor(store) {
     this.store = store
     this.ptr = calloc(omemo._get_sessionsize())
@@ -163,6 +165,7 @@ export class Session {
       if (r == -7) {
         let mksize = omemo._get_messagekeysize()
         let n = omemo._get_nskip()
+        if (n > this.maxSkip) throw "omemo: skip too many keys"
         malloced({buf: n * mksize}, ({buf}) => {
           omemo._set_skipbuf(buf)
           handleRet(dec())
