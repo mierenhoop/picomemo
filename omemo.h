@@ -35,9 +35,21 @@
 #define OMEMO_EPARAM    (-4)
 #define OMEMO_ESTATE    (-5)
 #define OMEMO_EKEYGONE  (-6)
-#define OMEMO_EUSER     (-7)
+// TODO: thrown by Encrypt/DecryptKey when supplied version does not match OR whenever session->version != store->version
+#define OMEMO_EVERSION  (-7)
+#define OMEMO_EUSER     (-8)
 
-#ifdef OMEMO2
+
+/**
+ * OMEMO0: eu.siacs.conversations.axolotl
+ * OMEMO2: urn:xmpp:omemo:2
+ */
+#define OMEMO0 0
+#define OMEMO2 2
+
+//#ifdef OMEMO2
+
+// TODO: use maximum, directly use integer instead of macros, just comment the maths
 
 #define OMEMO_KEYSIZE                        48
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
@@ -48,7 +60,7 @@
 #define OMEMO_INTERNAL_ENCRYPTED_MAXSIZE                               \
   (2 + 16 + 2 + OMEMO_INTERNAL_FULLMSG_MAXSIZE)
 
-#else
+//#else
 
 #define OMEMO_KEYSIZE                        32
 #define OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE 48
@@ -59,14 +71,9 @@
 #define OMEMO_INTERNAL_ENCRYPTED_MAXSIZE                               \
   (OMEMO_INTERNAL_FULLMSG_MAXSIZE + 8)
 
-#endif
+//#endif
 
 typedef uint8_t omemoKey[32];
-#ifdef OMEMO2
-typedef uint8_t omemoSerializedKey[32];
-#else
-typedef uint8_t omemoSerializedKey[1 + 32];
-#endif
 typedef uint8_t omemoCurveSignature[64];
 
 struct omemoKeyPair {
@@ -107,6 +114,7 @@ struct omemoKeyMessage {
 
 struct omemoStore {
   bool init;
+  int version;
   struct omemoKeyPair identity;
   struct omemoSignedPreKey cursignedprekey, prevsignedprekey;
   struct omemoPreKey prekeys[OMEMO_NUMPREKEYS];
@@ -115,6 +123,7 @@ struct omemoStore {
 
 struct omemoSession {
   int init;
+  int version;
   omemoKey remoteidentity;
   struct omemoState state;
   omemoKey usedek;
@@ -162,8 +171,8 @@ OMEMO_EXPORT int omemoRandom(void *p, size_t n);
 /**
  * Serialize a raw public key into the OMEMO public key format.
  */
-OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k,
-                                    const omemoKey pub);
+OMEMO_EXPORT void omemo0SerializeKey(uint8_t k[33],
+                                     const omemoKey pub);
 
 /**
  * Generate a new store for an OMEMO device.
@@ -262,13 +271,12 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
-                                 struct omemoStore *store,
+                                 const struct omemoStore *store,
                                  uint8_t *key, size_t *keyn,
                                  bool isprekey, const uint8_t *msg,
                                  size_t msgn);
 
-#ifdef OMEMO2
-#define omemoGetMessagePadSize(n) (16 - (n % 16))
+#define omemo2GetMessagePadSize(n) (16 - (n % 16))
 /**
  * Encrypt message which will be stored in the <payload> element.
  *
@@ -280,9 +288,8 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
+OMEMO_EXPORT int omemo2EncryptMessage(uint8_t *d, uint8_t key[48],
                                      uint8_t *s, size_t n);
-#else
 /**
  * Encrypt message which will be stored in the <payload> element.
  *
@@ -291,12 +298,10 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
+OMEMO_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n);
-#endif
 
-#ifdef OMEMO2
 /**
  * Decrypt message taken from the <payload> element.
  *
@@ -306,10 +311,9 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
+OMEMO_EXPORT int omemo2DecryptMessage(uint8_t *d, size_t *outn,
                                      const uint8_t *key, size_t keyn,
                                      const uint8_t *s, size_t n);
-#else
 /**
  * Decrypt message taken from the <payload> element.
  *
@@ -320,9 +324,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
  *
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
+OMEMO_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n);
-#endif
 
 #endif
