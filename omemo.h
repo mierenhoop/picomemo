@@ -35,7 +35,8 @@
 #define OMEMO_EPARAM    (-4)
 #define OMEMO_ESTATE    (-5)
 #define OMEMO_EKEYGONE  (-6)
-#define OMEMO_EUSER     (-7)
+#define OMEMO_ESTORE    (-7)
+#define OMEMO_EUSER     (-8)
 
 #ifdef OMEMO2
 
@@ -115,6 +116,7 @@ struct omemoStore {
 
 struct omemoSession {
   int init;
+  omemoKey identity;
   omemoKey remoteidentity;
   struct omemoState state;
   omemoKey usedek;
@@ -245,7 +247,6 @@ OMEMO_EXPORT int omemoInitiateSession(struct omemoSession *session,
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
-                                 const struct omemoStore *store,
                                  struct omemoKeyMessage *msg,
                                  const uint8_t *key, size_t keyn);
 /**
@@ -262,7 +263,7 @@ OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
-                                 struct omemoStore *store,
+                                 const struct omemoStore *store,
                                  uint8_t *key, size_t *keyn,
                                  bool isprekey, const uint8_t *msg,
                                  size_t msgn);
