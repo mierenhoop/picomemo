@@ -724,7 +724,7 @@ static void SendNormalOmemo(const char *msg) {
   }
 
   struct omemoKeyMessage encrypted;
-  r = omemoEncryptKey(&omemosession, &omemostore, &encrypted, encryptionkey, sizeof(encryptionkey));
+  r = omemoEncryptKey(&omemosession, &encrypted, encryptionkey, sizeof(encryptionkey));
   if (r < 0) {
     LogWarn("Message encryption error: %d", r);
     return;

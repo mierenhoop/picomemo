@@ -119,7 +119,7 @@ class XmppClient {
 >               omemoInitiateSession(&session, &store, bundle.spks, bundle.spk, ...)
                 sessions.Set(to_jid, device_id, session)
             }
->           omemoEncryptKey(&session, &store, out key_msg, key_payload)
+>           omemoEncryptKey(&session, out key_msg, key_payload)
             headers.append(MakeXml(key_msg.isprekey, key_msg.p, key_msg.n))
             // Save session into some database/file just like the store
 >           omemoSerializeSession(..., &session)
