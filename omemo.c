@@ -1163,7 +1163,7 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
   assert(d - p == omemoGetSerializedStoreSize(store));
 }
 
-OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
+OMEMO_EXPORT int omemoDeserializeStore(const uint8_t *p, size_t n,
                                        struct omemoStore *store) {
   if (!p || !store)
     return OMEMO_EPARAM;
@@ -1196,7 +1196,7 @@ OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
   memcpy(store->prevsignedprekey.kp.pub, fields[10].p, 32);
   memcpy(store->prevsignedprekey.sig, fields[11].p, 64);
   store->pkcounter = fields[12].v;
-  const char *e = p + n;
+  const uint8_t *e = p + n;
   int i = 0;
   while (i < OMEMO_NUMPREKEYS &&
          !ParseRepeatingField(p, e, &fields[13], 13) && fields[13].p) {
@@ -1254,7 +1254,7 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   assert(d - p == omemoGetSerializedSessionSize(session));
 }
 
-OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
+OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,
                                          struct omemoSession *session) {
   if (!p || !session)
     return OMEMO_EPARAM;

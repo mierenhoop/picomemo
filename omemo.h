@@ -206,7 +206,7 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *d,
 /**
  * @returns 0 or OMEMO_E*
  */
-OMEMO_EXPORT int omemoDeserializeStore(const char *p, size_t n,
+OMEMO_EXPORT int omemoDeserializeStore(const uint8_t *p, size_t n,
                                        struct omemoStore *store);
 /**
  * @returns size of buffer required for omemoSerializeSession
@@ -225,7 +225,7 @@ omemoSerializeSession(uint8_t *d, const struct omemoSession *session);
  * @param session must be initialized with omemoSetupSession
  * @return 0 or OMEMO_EPROTOBUF
  */
-OMEMO_EXPORT int omemoDeserializeSession(const char *p, size_t n,
+OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,
                                          struct omemoSession *session);
 
 /**
