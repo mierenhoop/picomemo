@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -ex
+
 CFLAGS="                       " make clean test-omemo
 CFLAGS="-DOMEMO2               " make clean test-omemo
 CFLAGS="         -DOMEMO_NOHACL" make clean test-omemo
