@@ -105,6 +105,7 @@ enum {
   SESSION_UNINIT = 0,
   SESSION_INIT,
   SESSION_READY,
+  SESSION_HEARTBEAT,
 };
 
 #define SerLen sizeof(omemoSerializedKey)
@@ -1028,6 +1029,23 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
     memcpy(session, &backup, sizeof(struct omemoSession));
   }
   return r;
+}
+
+OMEMO_EXPORT int omemoHeartbeat(struct omemoSession *session,
+                                const struct omemoStore *store,
+                                struct omemoKeyMessage *msg) {
+  if (!session || !store || !msg) return OMEMO_EPARAM;
+  if (session->state.nr >= 53) {
+    if (session->init == SESSION_READY) {
+      uint8_t empty[32] = { 0 };
+      int r = omemoEncryptKey(session, msg, empty, 32);
+      if (!r) session->init = SESSION_HEARTBEAT;
+      return r;
+    }
+  } else if (session->init == SESSION_HEARTBEAT) {
+    session->init = SESSION_READY;
+  }
+  return 0;
 }
 
 /******************** MESSAGE CONTENT ENCRYPTION *********************/

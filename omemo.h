@@ -268,6 +268,21 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
                                  bool isprekey, const uint8_t *msg,
                                  size_t msgn);
 
+/**
+ * Create a heartbeat message if the ratchet counter is too high.
+ *
+ * This function can should be called after every omemoDecryptKey(). It
+ * checks whether the counter is too high. When it is, it will fill
+ * the omemoKeyMessage with a newly encrypted key which should be sent
+ * afterwards. To check whether a heartbeat msg was made, check if
+ * msg->n > 0.
+ *
+ * @returns 0 or OMEMO_E*
+ */
+OMEMO_EXPORT int omemoHeartbeat(struct omemoSession *session,
+                                const struct omemoStore *store,
+                                struct omemoKeyMessage *msg);
+
 #ifdef OMEMO2
 #define omemoGetMessagePadSize(n) (16 - (n % 16))
 /**

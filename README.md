@@ -159,6 +159,11 @@ class XmppClient {
                 PublishBundle(&store)
                 // Send empty message
                 SendEncryptedMessage(msg.from, nil)
+            } else {
+                struct omemoKeyMessage keymsg = {0}
+>               omemoHeartbeat(&session, &store, &keymsg)
+                if msg.n > 0
+                    SendEncryptedMessage(msg.from, keymsg)
             }
             plaintext = allocate(len(msg.payload))
 >           omemoDecryptMessage(plaintext, key_payload, msg.iv, msg.payload, len(msg.payload))
@@ -175,10 +180,6 @@ class XmppClient {
 
 After calling any function of the API, the stack could be zeroized for
 extra security. This is *not* done by the library.
-
-Follow good practice rules as described in the OMEMO spec for advancing
-the ratchet timely
-[1](https://xmpp.org/extensions/xep-0384.html#:~:text=After%20receiving%20an%20OMEMOKeyExchange%20and%20successfully%20building%20a%20new%20session%2C%20the%20receiving%20device%20SHOULD%20automatically%20respond%20with%20an%20empty%20OMEMO%20message) [2](https://xmpp.org/extensions/xep-0384.html#:~:text=When%20a%20client%20receives%20the%20first%20message%20for%20a%20given%20ratchet%20key%20with%20a%20counter%20of%2053%20or%20higher%2C%20it%20MUST%20send%20a%20heartbeat%20message.).
 
 ### WASM
 
