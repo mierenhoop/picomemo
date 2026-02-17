@@ -1260,22 +1260,22 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   if (!p || !session)
     return;
   uint8_t *d = p;
-  d = FormatVarInt(d, PB_UINT32, 1, session->init);
-  d = FormatKey(d, 2, session->identity);
-  d = FormatKey(d, 3, session->remoteidentity);
-  d = FormatKey(d, 4, session->state.dhs.prv);
-  d = FormatKey(d, 5, session->state.dhs.pub);
-  d = FormatKey(d, 6, session->state.dhr);
-  d = FormatKey(d, 7, session->state.rk);
-  d = FormatKey(d, 8, session->state.cks);
-  d = FormatKey(d, 9, session->state.ckr);
-  d = FormatVarInt(d, PB_UINT32, 10, session->state.ns);
-  d = FormatVarInt(d, PB_UINT32, 11, session->state.nr);
-  d = FormatVarInt(d, PB_UINT32, 12, session->state.pn);
+  d = FormatKey(d, 1, session->remoteidentity);
+  d = FormatKey(d, 2, session->state.dhs.prv);
+  d = FormatKey(d, 3, session->state.dhs.pub);
+  d = FormatKey(d, 4, session->state.dhr);
+  d = FormatKey(d, 5, session->state.rk);
+  d = FormatKey(d, 6, session->state.cks);
+  d = FormatKey(d, 7, session->state.ckr);
+  d = FormatVarInt(d, PB_UINT32, 8, session->state.ns);
+  d = FormatVarInt(d, PB_UINT32, 9, session->state.nr);
+  d = FormatVarInt(d, PB_UINT32, 10, session->state.pn);
   // TODO: don't have to include used* after first ratchet
-  d = FormatKey(d, 13, session->usedek);
-  d = FormatVarInt(d, PB_UINT32, 14, session->usedpk_id);
-  d = FormatVarInt(d, PB_UINT32, 15, session->usedspk_id);
+  d = FormatKey(d, 11, session->usedek);
+  d = FormatVarInt(d, PB_UINT32, 12, session->usedpk_id);
+  d = FormatVarInt(d, PB_UINT32, 13, session->usedspk_id);
+  d = FormatVarInt(d, PB_UINT32, 14, session->init);
+  d = FormatKey(d, 15, session->identity);
   ASSERT(d - p == omemoGetSerializedSessionSize(session));
 }
 
@@ -1284,38 +1284,38 @@ OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,
   if (!p || !session)
     return OMEMO_EPARAM;
   struct ProtobufField fields[] = {
-      [1] = {PB_REQUIRED | PB_UINT32},
+      [1] = {PB_REQUIRED | PB_LEN, 32},
       [2] = {PB_REQUIRED | PB_LEN, 32},
       [3] = {PB_REQUIRED | PB_LEN, 32},
       [4] = {PB_REQUIRED | PB_LEN, 32},
       [5] = {PB_REQUIRED | PB_LEN, 32},
       [6] = {PB_REQUIRED | PB_LEN, 32},
       [7] = {PB_REQUIRED | PB_LEN, 32},
-      [8] = {PB_REQUIRED | PB_LEN, 32},
-      [9] = {PB_REQUIRED | PB_LEN, 32},
+      [8] = {PB_REQUIRED | PB_UINT32},
+      [9] = {PB_REQUIRED | PB_UINT32},
       [10] = {PB_REQUIRED | PB_UINT32},
-      [11] = {PB_REQUIRED | PB_UINT32},
+      [11] = {PB_REQUIRED | PB_LEN, 32},
       [12] = {PB_REQUIRED | PB_UINT32},
-      [13] = {PB_REQUIRED | PB_LEN, 32},
+      [13] = {PB_REQUIRED | PB_UINT32},
       [14] = {PB_REQUIRED | PB_UINT32},
-      [15] = {PB_REQUIRED | PB_UINT32},
+      [15] = {PB_REQUIRED | PB_LEN, 32},
   };
   if (ParseProtobuf(p, n, fields, 16))
     return OMEMO_EPROTOBUF;
-  session->init = fields[1].v;
-  memcpy(session->identity, fields[2].p, 32);
-  memcpy(session->remoteidentity, fields[3].p, 32);
-  memcpy(session->state.dhs.prv, fields[4].p, 32);
-  memcpy(session->state.dhs.pub, fields[5].p, 32);
-  memcpy(session->state.dhr, fields[6].p, 32);
-  memcpy(session->state.rk, fields[7].p, 32);
-  memcpy(session->state.cks, fields[8].p, 32);
-  memcpy(session->state.ckr, fields[9].p, 32);
-  session->state.ns = fields[10].v;
-  session->state.nr = fields[11].v;
-  session->state.pn = fields[12].v;
-  memcpy(session->usedek, fields[13].p, 32);
-  session->usedpk_id = fields[14].v;
-  session->usedspk_id = fields[15].v;
+  memcpy(session->remoteidentity, fields[1].p, 32);
+  memcpy(session->state.dhs.prv, fields[2].p, 32);
+  memcpy(session->state.dhs.pub, fields[3].p, 32);
+  memcpy(session->state.dhr, fields[4].p, 32);
+  memcpy(session->state.rk, fields[5].p, 32);
+  memcpy(session->state.cks, fields[6].p, 32);
+  memcpy(session->state.ckr, fields[7].p, 32);
+  session->state.ns = fields[8].v;
+  session->state.nr = fields[9].v;
+  session->state.pn = fields[10].v;
+  memcpy(session->usedek, fields[11].p, 32);
+  session->usedpk_id = fields[12].v;
+  session->usedspk_id = fields[13].v;
+  session->init = fields[14].v;
+  memcpy(session->identity, fields[15].p, 32);
   return 0;
 }

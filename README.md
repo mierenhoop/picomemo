@@ -12,7 +12,7 @@ cryptography required for XMPP's OMEMO (E2EE).
 
 - Low amount of code with few dependencies.
 
-- High performance, uses fast crypto when available.
+- High performance by using fast crypto when available.
 
 ## `omemo.c`
 
@@ -25,7 +25,7 @@ Both OMEMO 0.3 (`eu.siacs.conversations.axolotl`) and OMEMO 0.9
 when compiled with `-DOMEMO2`, OMEMO 0.9 is enabled. That means only one
 is active at a time. It is possible to include both versions in a client
 by compiling with `-DOMEMO_EXPORT=static` and directly including
-`omemo.c` while somehow reexporting the API.
+`omemo.c`.
 
 ### Crypto functions
 
@@ -70,6 +70,9 @@ documentation.
 
 To give an understanding how the API can be integrated in a client, here
 is some pseudocode for a rough overview of how the functions can be used:
+
+<details>
+<summary>API usage in pseudocode</summary>
 
 ```diff
 
@@ -175,6 +178,8 @@ class XmppClient {
 }
 
 ```
+
+</details>
 
 ### Security
 
