@@ -17,6 +17,7 @@
  */
 
 #include <mbedtls/aes.h>
+#include <mbedtls/constant_time.h>
 #include <mbedtls/gcm.h>
 #include <mbedtls/hkdf.h>
 
@@ -99,6 +100,12 @@
     int _r_;                                                           \
     if ((_r_ = expr))                                                  \
       return _r_;                                                      \
+  } while (0)
+
+#define ASSERT(expr)                                                   \
+  do {                                                                 \
+    int _r_ = expr;                                                    \
+    assert(_r_);                                                       \
   } while (0)
 
 enum {
@@ -196,7 +203,7 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
   uint32_t v;
   const uint8_t *e = s + n;
   uint32_t found = 0;
-  assert(nfields <= 16);
+  ASSERT(nfields <= 16);
   while (s < e) {
     // This is actually a varint, but we only support id < 16 and return
     // an error otherwise, so we don't have to account for multiple-byte
@@ -232,7 +239,7 @@ static bool ParseRepeatingField(const uint8_t *s, const uint8_t *e,
                                 int fieldid) {
   int type, id;
   uint32_t v;
-  assert(fieldid <= 16);
+  ASSERT(fieldid <= 16);
   while (s < e) {
     type = *s & 7;
     id = *s >> 3;
@@ -264,7 +271,7 @@ static inline int GetVarIntSize(uint32_t v) {
 
 static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id,
                              uint32_t v) {
-  assert(id < 16);
+  ASSERT(id < 16);
   *d++ = (id << 3) | type;
   do {
     *d = v & 0x7f;
@@ -277,7 +284,7 @@ static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id,
 #ifndef OMEMO2
 static uint8_t *FormatSerializedKey(uint8_t d[static 35], int id,
                                     const omemoKey k) {
-  assert(id < 16);
+  ASSERT(id < 16);
   *d++ = (id << 3) | PB_LEN;
   *d++ = 33;
   omemoSerializeKey(d, k);
@@ -287,7 +294,7 @@ static uint8_t *FormatSerializedKey(uint8_t d[static 35], int id,
 
 static uint8_t *FormatKey(uint8_t d[static 34], int id,
                           const omemoKey k) {
-  assert(id < 16);
+  ASSERT(id < 16);
   *d++ = (id << 3) | PB_LEN;
   *d++ = 32;
   memcpy(d, k, 32);
@@ -316,7 +323,7 @@ static size_t FormatPreKeyMessage(
   p = FormatVarInt(p, PB_UINT32, 6, spk_id);
   p = FormatSerializedKey(p, 3, ik);
   p = FormatSerializedKey(p, 2, ek);
-  assert(msgsz < 128);
+  ASSERT(msgsz < 128);
   p = FormatVarInt(p, PB_LEN, 4, msgsz);
 #endif
   return p - d;
@@ -382,7 +389,7 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
                                    const struct omemoKeyPair *ik,
                                    const uint8_t rnd[static 64],
                                    const uint8_t *msg, size_t msgn) {
-  assert(msgn <= SerLen);
+  ASSERT(msgn <= SerLen);
   uint8_t msgbuf[SerLen + 64];
   memcpy(msgbuf, msg, msgn);
   memcpy(msgbuf + msgn, rnd, 64);
@@ -406,7 +413,7 @@ static int CalculateCurveSignature(omemoCurveSignature sig,
 static bool VerifySignature(const omemoCurveSignature sig,
                             const omemoKey pub, const uint8_t *msg,
                             size_t msgn) {
-  assert(msgn <= SerLen);
+  ASSERT(msgn <= SerLen);
   uint8_t msgbuf[SerLen];
   memcpy(msgbuf, msg, msgn);
   omemoKey pubcpy;
@@ -523,7 +530,7 @@ static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika,
 static void Hmac(const omemoKey k, const uint8_t *in, size_t ilen,
                  uint8_t out[static 32]) {
   // Only error return is from parameter verification so we can assert
-  assert(!mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+  ASSERT(!mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
                           k, 32, in, ilen, out));
 }
 
@@ -550,10 +557,10 @@ static void AesCbc(int mode, uint8_t key[static 32], size_t n,
   // Errors are input validations, so we can assert
   mbedtls_aes_context aes;
   if (mode == MBEDTLS_AES_DECRYPT)
-    assert(!mbedtls_aes_setkey_dec(&aes, key, 256));
+    ASSERT(!mbedtls_aes_setkey_dec(&aes, key, 256));
   else
-    assert(!mbedtls_aes_setkey_enc(&aes, key, 256));
-  assert(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
+    ASSERT(!mbedtls_aes_setkey_enc(&aes, key, 256));
+  ASSERT(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
 }
 
 #define GetPad(n) (16 - ((n) % 16))
@@ -919,7 +926,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
   TRY(GetMac(mac, session->remoteidentity, session->identity,
              kdfout->mac, msg, msgn - 8));
 #endif
-  if (memcmp(mac, realmac, MACSIZE))
+  if (mbedtls_ct_memcmp(mac, realmac, MACSIZE))
     return OMEMO_ECORRUPT;
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
   AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, encn, kdfout->iv,
@@ -1066,14 +1073,14 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
   TRY(DeriveKey(Zero32, k, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
   Hmac(kdfout->mac, s, n, mac);
-  if (memcmp(mac, key + 32, 16))
+  if (mbedtls_ct_memcmp(mac, key + 32, 16))
     return OMEMO_ECORRUPT;
   AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, n, kdfout->iv, s, d);
 
   uint8_t p = d[n - 1];
   if (p > n)
     return OMEMO_ECORRUPT;
-  memset(d - p, 0, p);
+  memset(d + n - p, 0, p);
   *olen = n - p;
   return 0;
 }
@@ -1178,7 +1185,7 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
     d = FormatKey(d, 2, pk->kp.prv);
     d = FormatKey(d, 3, pk->kp.pub);
   }
-  assert(d - p == omemoGetSerializedStoreSize(store));
+  ASSERT(d - p == omemoGetSerializedStoreSize(store));
 }
 
 OMEMO_EXPORT int omemoDeserializeStore(const uint8_t *p, size_t n,
@@ -1269,7 +1276,7 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   d = FormatKey(d, 13, session->usedek);
   d = FormatVarInt(d, PB_UINT32, 14, session->usedpk_id);
   d = FormatVarInt(d, PB_UINT32, 15, session->usedspk_id);
-  assert(d - p == omemoGetSerializedSessionSize(session));
+  ASSERT(d - p == omemoGetSerializedSessionSize(session));
 }
 
 OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,

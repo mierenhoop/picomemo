@@ -40,7 +40,7 @@ static void CopyHex(uint8_t *d, const char *hex) {
   assert(n % 2 == 0);
   n /= 2;
   for (int i = 0; i < n; i++) {
-    sscanf(hex+(i*2), "%02hhx", d+i);
+    assert(sscanf(hex+(i*2), "%02hhx", d+i) == 1);
   }
 }
 
