@@ -21,6 +21,10 @@
 #include <mbedtls/gcm.h>
 #include <mbedtls/hkdf.h>
 
+#ifdef __linux__
+#include <sys/random.h>
+#endif
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -116,6 +120,39 @@ enum {
 };
 
 #define SerLen sizeof(omemoSerializedKey)
+
+static omemoLoadMessageKeyCallback  g_lmkcb;
+static omemoStoreMessageKeyCallback g_smkcb;
+static omemoRandomCallback          g_rndcb;
+
+static int omemoLoadMessageKey(struct omemoSession *s,
+                                     struct omemoMessageKey *sk) {
+  if (g_lmkcb) return g_lmkcb(s, sk);
+  return 1;
+}
+
+static int omemoStoreMessageKey(struct omemoSession *s,
+                                      const struct omemoMessageKey *sk,
+                                      uint64_t n) {
+  if (g_smkcb) return g_smkcb(s, sk, n);
+  return 0;
+}
+
+static int omemoRandom(void *p, size_t n) {
+  if (g_rndcb) return g_rndcb(p, n);
+#ifdef __linux__
+  return getrandom(p, n, 0) == n ? 0 : OMEMO_ERANDOM;
+#endif
+  return OMEMO_ERANDOM;
+}
+
+OMEMO_EXPORT void omemoSetCallbacks(omemoLoadMessageKeyCallback lmk,
+                                    omemoStoreMessageKeyCallback smk,
+                                    omemoRandomCallback rnd) {
+  g_lmkcb = lmk;
+  g_smkcb = smk;
+  g_rndcb = rnd;
+}
 
 OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k,
                                     const omemoKey pub) {

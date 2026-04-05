@@ -25,7 +25,7 @@
 
 #include "o/store.inc"
 
-int omemoRandom(void *d, size_t n) {
+int Random(void *d, size_t n) {
 #ifndef __EMSCRIPTEN__
   return getrandom(d, n, 0) != n;
 #else
@@ -322,7 +322,7 @@ static void RemoveSkippedKey(int i) {
   mkskippedi--;
 }
 
-int omemoLoadMessageKey(struct omemoSession *s, struct omemoMessageKey *k) {
+int LoadMessageKey(struct omemoSession *s, struct omemoMessageKey *k) {
   for (int i = 0; i < mkskippedi; i++) {
     struct omemoMessageKey *sk = &mkskipped[i];
     if (k->nr == sk->nr && !memcmp(k->dh, sk->dh, 32)) {
@@ -334,7 +334,7 @@ int omemoLoadMessageKey(struct omemoSession *s, struct omemoMessageKey *k) {
   return 1;
 }
 
-int omemoStoreMessageKey(struct omemoSession *s, const struct omemoMessageKey *k, uint64_t n) {
+int StoreMessageKey(struct omemoSession *s, const struct omemoMessageKey *k, uint64_t n) {
   if (mkskippedi >= MKSKIPPEDN)
     return OMEMO_EUSER;
   memcpy(&mkskipped[mkskippedi++], k, sizeof(*k));
@@ -620,6 +620,7 @@ static void TestSessionIntegration() {
   } while (0)
 
 int main() {
+  omemoSetCallbacks(LoadMessageKey, StoreMessageKey, Random);
   // TODO: tests TestCurve25519, TestSignature, TestSession and
   // TestSerialization are slow because they use the slow
   // edsign_sign_modified and edsign_verify.

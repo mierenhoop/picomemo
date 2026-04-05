@@ -75,13 +75,6 @@ is some pseudocode for a rough overview of how the functions can be used:
 <summary>API usage in pseudocode</summary>
 
 ```diff
-
-// Implement random callback (required!)
-int omemoRandom(p, n) {
-    getrandom(p, n, 0)
-    return 0
-}
-
 class XmppClient {
     struct omemoStore store
     Map<(Jid, DeviceId), struct omemoSession> sessions
@@ -137,17 +130,20 @@ class XmppClient {
             // omemoStoreMessageKey will be called, you must implement
             // them just like omemoRandom at the top level (shown here
             // for demonstration purposes.
->           int omemoLoadMessageKey(session, key) {
+            int LoadMessageKey(session, key) {
                 key.mk = skipped_keys[session][key.dh, key.nr]
                 return Found?(key.mk) ? 0 : 1
             }
 
->           int omemoStoreMessageKey(session, key, n) {
+            int StoreMessageKey(session, key, n) {
                 if n > MAX_SKIP_KEYS {
                     return OMEMO_EUSER
                 }
                 skipped_keys[session][key.dh, key.nr] = key.mk
             }
+            // This should usually be done once at the beginning of your
+            // program
+>           omemoSetCallback(LoadMessageKey, StoreMessageKey, NULL);
 
             // Search the XML of the message for our key and get the
             // prekey/kex attribute

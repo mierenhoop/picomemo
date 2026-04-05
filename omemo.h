@@ -37,6 +37,7 @@
 #define OMEMO_EKEYGONE  (-6)
 #define OMEMO_ESTORE    (-7)
 #define OMEMO_EUSER     (-8)
+#define OMEMO_ERANDOM   (-9)
 
 #ifdef OMEMO2
 
@@ -123,43 +124,23 @@ struct omemoSession {
   uint32_t usedpk_id, usedspk_id;
 };
 
-/**
- * User supplied function.
- *
- * To pass userdata to this callback, it is recommended to wrap
- * omemoSession within another struct and appending user data fields to
- * the new struct.
- *
- * @param sk has the nr and dh field filled, use them to look up the mk
- * and copy it to st->mk
- * @returns 0 when found or 1 when not found or OMEMO_E*
- */
-OMEMO_EXPORT int omemoLoadMessageKey(struct omemoSession *,
-                                     struct omemoMessageKey *sk);
+typedef int (*omemoLoadMessageKeyCallback)(struct omemoSession *,
+                                           struct omemoMessageKey *sk);
+
+typedef int (*omemoStoreMessageKeyCallback)(
+    struct omemoSession *,
+    const struct omemoMessageKey *,
+    uint64_t n);
+
+typedef int (*omemoRandomCallback)(void *p, size_t n);
 
 /**
- * User supplied function.
- *
- * When n > max skipped keys, the implementation of this function should
- * return an error. omemoStoreMessageKey will be called n-1 more times.
- *
- * @see omemoLoadMessageKey()
- *
- * @param n amount of keys to be skipped in total
- * @returns 0 or OMEMO_E*
+ * Set global callbacks for storing/loading skipped message keys and
+ * random generation.
  */
-OMEMO_EXPORT int omemoStoreMessageKey(struct omemoSession *,
-                                      const struct omemoMessageKey *,
-                                      uint64_t n);
-
-/**
- * User supplied random function.
- *
- * @param p points to the to-be-filled array
- * @param n is the amount of random bytes which should be generated in p
- * @returns 0 or OMEMO_E*
- */
-OMEMO_EXPORT int omemoRandom(void *p, size_t n);
+OMEMO_EXPORT void omemoSetCallbacks(omemoLoadMessageKeyCallback,
+                                    omemoStoreMessageKeyCallback,
+                                    omemoRandomCallback);
 
 /**
  * Serialize a raw public key into the OMEMO public key format.

@@ -822,11 +822,11 @@ void RunIm(const char *ip) {
 
 sqlite3 *db;
 
-int omemoRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
+int Random(void *d, size_t n) { return getrandom(d, n, 0) != n; }
 int xmppRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
 
 // TODO: test this
-int omemoLoadMessageKey(struct omemoSession *, struct omemoMessageKey *sk) {
+int LoadMessageKey(struct omemoSession *, struct omemoMessageKey *sk) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db, "delete from mkskipped where dh = ? and nr = ? returning mk;", -1, &stmt, NULL);
   assert(!rc);
@@ -853,7 +853,7 @@ int omemoLoadMessageKey(struct omemoSession *, struct omemoMessageKey *sk) {
 }
 
 // TODO: test this
-int omemoStoreMessageKey(struct omemoSession *, const struct omemoMessageKey *sk, uint64_t) {
+int StoreMessageKey(struct omemoSession *, const struct omemoMessageKey *sk, uint64_t) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db, "insert into mkskipped(dh,nr,mk) values (?,?,?);", -1, &stmt, NULL);
   assert(!rc);
@@ -929,6 +929,7 @@ void LoadSession() {
 }
 
 int main() {
+  omemoSetCallbacks(LoadMessageKey, StoreMessageKey, Random);
   RunIm(NULL);
 }
 
