@@ -7,7 +7,8 @@ OMEMOSRCS=c25519.c hacl.c omemo.c
 XMPPSRCS=example/xmpp.c example/yxml.c
 IMSRCS=example/im.c
 
-ALLBINS=o/test-xmpp \
+ALLBINS=o/omemo.so \
+		o/test-xmpp \
 		o/test-omemo \
 		o/im \
 		o/generate
@@ -32,6 +33,9 @@ $(ALLBINS): | o
 
 o:
 	mkdir -p o
+
+o/picomemo.so: omemo.c hacl.c | o
+	$(CC) -shared -o $@ $^ $(CFLAGS) $(LDFLAGS) -lmbedcrypto
 
 o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
 	$(CC) -o $@ test/xmpp.c example/yxml.c  $(CFLAGS) -Iexample $(MBED_FLAGS)
