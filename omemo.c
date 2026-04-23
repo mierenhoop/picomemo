@@ -146,7 +146,7 @@ static int omemoRandom(void *p, size_t n) {
   return OMEMO_ERANDOM;
 }
 
-OMEMO_EXPORT void omemoSetCallbacks(omemoLoadMessageKeyCallback lmk,
+void omemoSetCallbacks(omemoLoadMessageKeyCallback lmk,
                                     omemoStoreMessageKeyCallback smk,
                                     omemoRandomCallback rnd) {
   g_lmkcb = lmk;
@@ -154,7 +154,7 @@ OMEMO_EXPORT void omemoSetCallbacks(omemoLoadMessageKeyCallback lmk,
   g_rndcb = rnd;
 }
 
-OMEMO_EXPORT void omemoSerializeKey(omemoSerializedKey k,
+void omemoSerializeKey(omemoSerializedKey k,
                                     const omemoKey pub) {
 #ifdef OMEMO2
   memcpy(k, pub, SerLen);
@@ -506,7 +506,7 @@ static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
   return n + !n;
 }
 
-OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store) {
+int omemoRefillPreKeys(struct omemoStore *store) {
   if (!store)
     return OMEMO_EPARAM;
   int i;
@@ -539,7 +539,7 @@ static int omemoSetupStoreImpl(struct omemoStore *store) {
   return 0;
 }
 
-OMEMO_EXPORT int omemoSetupStore(struct omemoStore *store) {
+int omemoSetupStore(struct omemoStore *store) {
   if (!store)
     return OMEMO_EPARAM;
   int r;
@@ -690,7 +690,7 @@ static int EncryptKeyImpl(struct omemoSession *session,
   return 0;
 }
 
-OMEMO_EXPORT int omemoEncryptKey(struct omemoSession *session,
+int omemoEncryptKey(struct omemoSession *session,
                                  struct omemoKeyMessage *msg,
                                  const uint8_t *key, size_t keyn) {
   if (!session || !msg || keyn > OMEMO_KEYSIZE)
@@ -758,7 +758,7 @@ static int RatchetInitAlice(struct omemoState *state, const omemoKey sk,
   return DeriveRootKey(state, state->cks);
 }
 
-OMEMO_EXPORT int omemoInitiateSession(struct omemoSession *session,
+int omemoInitiateSession(struct omemoSession *session,
                                       const struct omemoStore *store,
                                       const omemoCurveSignature spks,
                                       const omemoSerializedKey spk,
@@ -818,7 +818,7 @@ FindSignedPreKey(const struct omemoStore *store, uint32_t spk_id) {
   return NULL;
 }
 
-OMEMO_EXPORT int omemoRotateSignedPreKey(struct omemoStore *store) {
+int omemoRotateSignedPreKey(struct omemoStore *store) {
   if (!store)
     return OMEMO_EPARAM;
   struct omemoSignedPreKey spk;
@@ -1055,7 +1055,7 @@ static int DecryptGenericKeyImpl(struct omemoSession *session,
   return DecryptKeyImpl(session, key, keyn, msg, msgn);
 }
 
-OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
+int omemoDecryptKey(struct omemoSession *session,
                                  const struct omemoStore *store,
                                  uint8_t *key, size_t *keyn,
                                  bool isprekey, const uint8_t *msg,
@@ -1075,7 +1075,7 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
   return r;
 }
 
-OMEMO_EXPORT int omemoHeartbeat(struct omemoSession *session,
+int omemoHeartbeat(struct omemoSession *session,
                                 const struct omemoStore *store,
                                 struct omemoKeyMessage *msg) {
   if (!session || !store || !msg) return OMEMO_EPARAM;
@@ -1095,7 +1095,7 @@ OMEMO_EXPORT int omemoHeartbeat(struct omemoSession *session,
 /******************** MESSAGE CONTENT ENCRYPTION *********************/
 
 #ifdef OMEMO2
-OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
+int omemoDecryptMessage(uint8_t *d, size_t *olen,
                                      const uint8_t *key, size_t keyn,
                                      const uint8_t *s, size_t n) {
   if (!d || !olen || !key || !s)
@@ -1122,7 +1122,7 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *olen,
   return 0;
 }
 #else
-OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
+int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n) {
   if (!d || !key || !iv || !s)
@@ -1142,7 +1142,7 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
 #endif
 
 #ifdef OMEMO2
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
+int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
                                      uint8_t *s, size_t n) {
   if (!d || !key || !s)
     return OMEMO_EPARAM;
@@ -1162,7 +1162,7 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
   return 0;
 }
 #else
-OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
+int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n) {
   if (!d || !key || !iv || !s)
@@ -1196,7 +1196,7 @@ size_t omemoGetSerializedStoreSize(const struct omemoStore *store) {
   return sum;
 }
 
-OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
+void omemoSerializeStore(uint8_t *p,
                                       const struct omemoStore *store) {
   if (!p || !store)
     return;
@@ -1225,7 +1225,7 @@ OMEMO_EXPORT void omemoSerializeStore(uint8_t *p,
   ASSERT(d - p == omemoGetSerializedStoreSize(store));
 }
 
-OMEMO_EXPORT int omemoDeserializeStore(const uint8_t *p, size_t n,
+int omemoDeserializeStore(const uint8_t *p, size_t n,
                                        struct omemoStore *store) {
   if (!p || !store)
     return OMEMO_EPARAM;
@@ -1292,7 +1292,7 @@ omemoGetSerializedSessionSize(const struct omemoSession *session) {
          GetVarIntSize(session->init);
 }
 
-OMEMO_EXPORT void
+void
 omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   if (!p || !session)
     return;
@@ -1316,7 +1316,7 @@ omemoSerializeSession(uint8_t *p, const struct omemoSession *session) {
   ASSERT(d - p == omemoGetSerializedSessionSize(session));
 }
 
-OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,
+int omemoDeserializeSession(const uint8_t *p, size_t n,
                                          struct omemoSession *session) {
   if (!p || !session)
     return OMEMO_EPARAM;

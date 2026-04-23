@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 
 import xeddsa
 import x3dh
@@ -8,9 +9,17 @@ from twomemo import twomemo
 import omemo
 from omemo.storage import Maybe, JSONType, Nothing
 
-import bundle
 
-OMEMO2=len(bundle.ik) == 32
+if sys.argv[1] == "bundle":
+    import bundle
+    assert len(bundle.ik) == 33
+    OMEMO2 = False
+elif sys.argv[1] == "bundle2":
+    import bundle2 as bundle
+    assert len(bundle.ik) == 32
+    OMEMO2 = True
+else:
+    assert False
 
 class StorageImpl(omemo.storage.Storage):
     def __init__(self) -> None:
@@ -71,7 +80,7 @@ async def run_twomemo():
     k=twomemo.PlainKeyMaterialImpl(b"\x55"*32,b"\xaa"*16)
     ses, msg = await o.build_session_active("user@localhost", 8, b, k)
     ser=ses.key_exchange.serialize(msg.serialize())
-    with open("o/msg.bin", "wb") as f:
+    with open("o/msg2.bin", "wb") as f:
         f.write(ser)
 
 async def main():

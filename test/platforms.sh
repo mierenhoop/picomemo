@@ -5,7 +5,7 @@ set -ex
 make clean mbedtls o/test-omemo && rm o/test-omemo
 CC=aarch64-linux-gnu-gcc AR=aarch64-linux-gnu-gcc-ar \
   make -j -C mbedtls lib
-CC=aarch64-linux-gnu-gcc MBED_VENDOR=mbedtls \
+CFLAGS="-static" CC=aarch64-linux-gnu-gcc MBED_VENDOR=mbedtls \
   make o/test-omemo
 qemu-aarch64 o/test-omemo
 

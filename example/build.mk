@@ -1,10 +1,9 @@
-ALLBINS+=o/im
-
 XMPPSRCS:=example/xmpp.c example/yxml.c
 IMSRCS:=example/im.c
 
-o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | o/store.inc test/cacert.inc
-	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE $(MBED_FLAGS) -lsqlite3
+# Always use hacl + mbedtls
+o/im: $(IMSRCS) $(XMPPSRCS) omemo.c hacl.c mbedtls.c | o/store.inc test/cacert.inc
+	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE -lmbedtls -lmbedcrypto -lmbedx509 -lsqlite3
 
 define IM_INPUT
 /login admin@localhost

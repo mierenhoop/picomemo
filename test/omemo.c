@@ -23,7 +23,11 @@
 
 #include <sys/random.h>
 
+#ifdef OMEMO2
+#include "o/store2.inc"
+#else
 #include "o/store.inc"
+#endif
 
 int Random(void *d, size_t n) {
 #ifndef __EMSCRIPTEN__
@@ -582,7 +586,11 @@ static void TestSessionIntegration() {
   memset(&session, 0, sizeof(session));
   uint8_t buf[1000];
   omemoDeserializeStore(store_inc, store_inc_len, &store);
+#ifdef OMEMO2
+  FILE *f = fopen("o/msg2.bin", "r");
+#else
   FILE *f = fopen("o/msg.bin", "r");
+#endif
   assert(f);
   int n = fread(buf, 1, 1000, f);
   assert(n > 0);
@@ -605,7 +613,11 @@ static void TestSessionIntegration() {
   memset(payload, 0xcc, sizeof(payload));
   struct omemoKeyMessage msg;
   assert(!omemoEncryptKey(&session, &msg, payload, sizeof(payload)));
+#ifdef OMEMO2
+  f = fopen("o/resp2.bin", "w");
+#else
   f = fopen("o/resp.bin", "w");
+#endif
   assert(f);
   assert(fwrite(msg.p, 1, msg.n, f) == msg.n);
   fclose(f);

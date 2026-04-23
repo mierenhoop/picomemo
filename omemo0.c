@@ -128,7 +128,7 @@ static int omemo0Random(void *p, size_t n) {
   return OMEMO0_ERANDOM;
 }
 
-OMEMO0_EXPORT void omemo0SetCallbacks(omemo0LoadMessageKeyCallback lmk,
+void omemo0SetCallbacks(omemo0LoadMessageKeyCallback lmk,
                                     omemo0StoreMessageKeyCallback smk,
                                     omemo0RandomCallback rnd) {
   g_lmkcb = lmk;
@@ -136,7 +136,7 @@ OMEMO0_EXPORT void omemo0SetCallbacks(omemo0LoadMessageKeyCallback lmk,
   g_rndcb = rnd;
 }
 
-OMEMO0_EXPORT void omemo0SerializeKey(omemo0SerializedKey k,
+void omemo0SerializeKey(omemo0SerializedKey k,
                                     const omemo0Key pub) {
 
   k[0] = 5;
@@ -461,7 +461,7 @@ static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
   return n + !n;
 }
 
-OMEMO0_EXPORT int omemo0RefillPreKeys(struct omemo0Store *store) {
+int omemo0RefillPreKeys(struct omemo0Store *store) {
   if (!store)
     return OMEMO0_EPARAM;
   int i;
@@ -492,7 +492,7 @@ static int omemo0SetupStoreImpl(struct omemo0Store *store) {
   return 0;
 }
 
-OMEMO0_EXPORT int omemo0SetupStore(struct omemo0Store *store) {
+int omemo0SetupStore(struct omemo0Store *store) {
   if (!store)
     return OMEMO0_EPARAM;
   int r;
@@ -630,7 +630,7 @@ static int EncryptKeyImpl(struct omemo0Session *session,
   return 0;
 }
 
-OMEMO0_EXPORT int omemo0EncryptKey(struct omemo0Session *session,
+int omemo0EncryptKey(struct omemo0Session *session,
                                  struct omemo0KeyMessage *msg,
                                  const uint8_t *key, size_t keyn) {
   if (!session || !msg || keyn > OMEMO0_KEYSIZE)
@@ -698,7 +698,7 @@ static int RatchetInitAlice(struct omemo0State *state, const omemo0Key sk,
   return DeriveRootKey(state, state->cks);
 }
 
-OMEMO0_EXPORT int omemo0InitiateSession(struct omemo0Session *session,
+int omemo0InitiateSession(struct omemo0Session *session,
                                       const struct omemo0Store *store,
                                       const omemo0CurveSignature spks,
                                       const omemo0SerializedKey spk,
@@ -751,7 +751,7 @@ FindSignedPreKey(const struct omemo0Store *store, uint32_t spk_id) {
   return NULL;
 }
 
-OMEMO0_EXPORT int omemo0RotateSignedPreKey(struct omemo0Store *store) {
+int omemo0RotateSignedPreKey(struct omemo0Store *store) {
   if (!store)
     return OMEMO0_EPARAM;
   struct omemo0SignedPreKey spk;
@@ -949,7 +949,7 @@ static int DecryptGenericKeyImpl(struct omemo0Session *session,
   return DecryptKeyImpl(session, key, keyn, msg, msgn);
 }
 
-OMEMO0_EXPORT int omemo0DecryptKey(struct omemo0Session *session,
+int omemo0DecryptKey(struct omemo0Session *session,
                                  const struct omemo0Store *store,
                                  uint8_t *key, size_t *keyn,
                                  bool isprekey, const uint8_t *msg,
@@ -969,7 +969,7 @@ OMEMO0_EXPORT int omemo0DecryptKey(struct omemo0Session *session,
   return r;
 }
 
-OMEMO0_EXPORT int omemo0Heartbeat(struct omemo0Session *session,
+int omemo0Heartbeat(struct omemo0Session *session,
                                 const struct omemo0Store *store,
                                 struct omemo0KeyMessage *msg) {
   if (!session || !store || !msg) return OMEMO0_EPARAM;
@@ -989,7 +989,7 @@ OMEMO0_EXPORT int omemo0Heartbeat(struct omemo0Session *session,
 /******************** MESSAGE CONTENT ENCRYPTION *********************/
 
 
-OMEMO0_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
+int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n) {
   if (!d || !key || !iv || !s)
@@ -1009,7 +1009,7 @@ OMEMO0_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
 
 
 
-OMEMO0_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
+int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n) {
   if (!d || !key || !iv || !s)
@@ -1043,7 +1043,7 @@ size_t omemo0GetSerializedStoreSize(const struct omemo0Store *store) {
   return sum;
 }
 
-OMEMO0_EXPORT void omemo0SerializeStore(uint8_t *p,
+void omemo0SerializeStore(uint8_t *p,
                                       const struct omemo0Store *store) {
   if (!p || !store)
     return;
@@ -1072,7 +1072,7 @@ OMEMO0_EXPORT void omemo0SerializeStore(uint8_t *p,
   ASSERT(d - p == omemo0GetSerializedStoreSize(store));
 }
 
-OMEMO0_EXPORT int omemo0DeserializeStore(const uint8_t *p, size_t n,
+int omemo0DeserializeStore(const uint8_t *p, size_t n,
                                        struct omemo0Store *store) {
   if (!p || !store)
     return OMEMO0_EPARAM;
@@ -1139,7 +1139,7 @@ omemo0GetSerializedSessionSize(const struct omemo0Session *session) {
          GetVarIntSize(session->init);
 }
 
-OMEMO0_EXPORT void
+void
 omemo0SerializeSession(uint8_t *p, const struct omemo0Session *session) {
   if (!p || !session)
     return;
@@ -1163,7 +1163,7 @@ omemo0SerializeSession(uint8_t *p, const struct omemo0Session *session) {
   ASSERT(d - p == omemo0GetSerializedSessionSize(session));
 }
 
-OMEMO0_EXPORT int omemo0DeserializeSession(const uint8_t *p, size_t n,
+int omemo0DeserializeSession(const uint8_t *p, size_t n,
                                          struct omemo0Session *session) {
   if (!p || !session)
     return OMEMO0_EPARAM;
