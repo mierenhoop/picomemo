@@ -1,155 +1,58 @@
+### CONFIG ###
+
+DRIVERSRCS:=hacl.c
+DRIVERLIBS:=
+
 ifndef CFLAGS
 CFLAGS+=-g
 endif
 CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP
 
-OMEMOSRCS=c25519.c hacl.c omemo.c
-XMPPSRCS=example/xmpp.c example/yxml.c
-IMSRCS=example/im.c
+###
 
-ALLBINS=o/omemo.so \
-		o/test-xmpp \
-		o/test-omemo \
-		o/im \
-		o/generate
+GENERATED:=omemo0.c omemo0.h omemo2.c omemo2.h
+OMEMOSRCS:=c25519.c hacl.c omemo.c
+
+ALLBINS:=o/picomemo0.so o/picomemo2.so
 
 ifdef MBED_VENDOR
-MBED_FLAGS=$(MBED_VENDOR)/library/libmbedtls.a    \
-           $(MBED_VENDOR)/library/libmbedcrypto.a \
-           $(MBED_VENDOR)/library/libmbedx509.a   \
-        -I $(MBED_VENDOR)/include
+MBED_FLAGS:=$(MBED_VENDOR)/library/libmbedtls.a    \
+            $(MBED_VENDOR)/library/libmbedcrypto.a \
+            $(MBED_VENDOR)/library/libmbedx509.a   \
+        -I  $(MBED_VENDOR)/include
 else
-MBED_FLAGS=-lmbedtls -lmbedcrypto -lmbedx509
+MBED_FLAGS:=-lmbedtls -lmbedcrypto -lmbedx509
 endif
 
-DEPS=$(ALLBINS:%=%.d)
+DEPS:=$(ALLBINS:%=%.d)
 
-all: $(ALLBINS) tags
-
-.PHONY: test
-test: test-omemo
+all: $(ALLBINS) $(GENERATED) test-omemo tags
 
 $(ALLBINS): | o
 
 o:
 	mkdir -p o
 
-o/picomemo.so: omemo.c hacl.c | o
+o/picomemo0.so: omemo0.c $(DRIVERSRCS) | o
 	$(CC) -shared -o $@ $^ $(CFLAGS) $(LDFLAGS) -lmbedcrypto
 
-o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
-	$(CC) -o $@ test/xmpp.c example/yxml.c  $(CFLAGS) -Iexample $(MBED_FLAGS)
+o/picomemo2.so: omemo2.c $(DRIVERSRCS) | o
+	$(CC) -shared -o $@ $^ $(CFLAGS) $(LDFLAGS) -lmbedcrypto
 
-o/test-omemo: test/omemo.c c25519.c hacl.c omemo.c o/store.inc o/msg.bin
-	$(CC) -o $@ test/omemo.c c25519.c hacl.c $(CFLAGS) -DOMEMO_EXPORT=static -static $(MBED_FLAGS)
-
-o/im: $(IMSRCS) $(XMPPSRCS) $(OMEMOSRCS) | o/store.inc test/cacert.inc
-	$(CC) -o $@ $^ $(CFLAGS) -Iexample -DIM_NATIVE $(MBED_FLAGS) -lsqlite3
-
-o/generate: test/generate.c $(OMEMOSRCS)
-	$(CC) -o $@ $^ $(CFLAGS) $(MBED_FLAGS)
-
-o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv/
-	PYTHONPATH=o ./test/bot-venv/bin/python test/initsession.py
-
-test/localhost.crt:
-	openssl req -new -x509 -key test/localhost.key -out $@ -days 3650 -config test/localhost.cnf
-
-test/cacert.inc: test/localhost.crt
-	(cat test/localhost.crt; printf "\0") | xxd -i -name cacert_pem > $@
-
-o/store.inc o/bundle.py: o/generate
-	o/generate o/store.inc o/bundle.py
+$(GENERATED): omemo.c omemo.h split.lua
+	lua split.lua
 
 ### MBEDTLS VENDORING ###
 
-CKSUM=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110
+MBEDTLSCKSUM:=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110
 .DELETE_ON_ERROR: mbedtls.tar.bz2
 mbedtls.tar.bz2:
 	curl -Lo $@ "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2"
-	echo "$(CKSUM) mbedtls.tar.bz2" | sha256sum -c
+	echo "$(MBEDTLSCKSUM) mbedtls.tar.bz2" | sha256sum -c
 
 mbedtls: mbedtls.tar.bz2
 	rm -rf $@
 	tar -xjf $< --strip-components=1 --one-top-level=$@
-
-### ESP32 ###
-
-ESP_DEV?=/dev/ttyUSB0
-
-ifneq (,$(wildcard $(ESP_DEV)))
-	ESP_DEVARG= --device=$(ESP_DEV)
-endif
-
-ESPIDF_DOCKERCMD=docker run -it --rm -v ${PWD}:/project -u $(shell id -u) -w /project -e HOME=/tmp $(ESP_DEVARG) espressif/idf idf.py -B o/example-esp-im -C example/esp-im
-
-.PHONY: esp-im
-esp-im: | o
-	$(ESPIDF_DOCKERCMD) build
-
-.PHONY: size-esp-im
-size-esp-im: | o
-	$(ESPIDF_DOCKERCMD) size-files
-
-.PHONY: esp-upload
-esp-upload:
-	$(ESPIDF_DOCKERCMD) flash
-
-.PHONY: esp-console
-esp-console:
-	rlwrap -- socat - $(ESP_DEV),b115200,cfmakeraw,ignoreeof
-
-.PHONY: esp-monitor
-esp-monitor:
-	$(ESPIDF_DOCKERCMD) monitor
-
-### TESTS ###
-
-.PHONY: test-xmpp
-test-xmpp: o/test-xmpp
-	./o/test-xmpp
-
-.PHONY: test-omemo
-test-omemo: o/test-omemo
-	./o/test-omemo
-
-### INTEGRATION ###
-
-define IM_INPUT
-/login admin@localhost
-adminpass
-endef
-export IM_INPUT
-
-.PHONY: runim
-runim: o/im
-	rlwrap -P "$$IM_INPUT" ./o/im
-
-.PHONY: start-prosody
-start-prosody: test/localhost.crt
-	docker-compose -f test/docker-compose.yml up -d --build
-
-.PHONY: stop-prosody
-stop-prosody:
-	docker-compose -f test/docker-compose.yml down
-
-.PHONY: reset-accounts
-reset-accounts:
-	# using docker instead of docker-compose is way faster
-	docker exec test_prosody_1 sh -c\
-	  'prosodyctl deluser admin@localhost && \
-	   prosodyctl deluser user@localhost && \
-	   prosodyctl register admin localhost adminpass && \
-	   prosodyctl register user  localhost userpass'
-
-
-test/bot-venv/:
-	python -m venv test/bot-venv/
-	./test/bot-venv/bin/pip install slixmpp==1.8.5
-	./test/bot-venv/bin/pip install slixmpp-omemo==1.0.0
-
-start-omemo-bot: | test/bot-venv/
-	./test/bot-venv/bin/python test/bot-omemo.py
 
 .PHONY: tags
 tags:
@@ -158,5 +61,9 @@ tags:
 .PHONY: clean
 clean:
 	rm -rf o mbedtls
+
+# These are optional
+include example/build.mk
+include test/build.mk
 
 -include $(DEPS)

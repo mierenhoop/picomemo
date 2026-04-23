@@ -47,7 +47,7 @@ on modern hardware than HACL\*.
 - C compiler (gcc)
 
 - For testing & development: GNU Make, docker-compose, Python, openssl,
-  rlwrap, socat, xxd, POSIX commands, ctags-exuberant
+  rlwrap, socat, xxd, POSIX commands, ctags-exuberant, Lua
 
 ## Usage
 
