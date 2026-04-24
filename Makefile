@@ -24,8 +24,7 @@ endif
 endif
 
 ifneq ($(filter openssl.c,$(DRIVERS)),)
-# TODO: remove -lmbedcrypto
-LIBS+=-lssl -lcrypto -lmbedcrypto
+LIBS+=-lssl -lcrypto
 endif
 
 # TODO: remove this by having these function behind omemoDriver* also
@@ -35,7 +34,11 @@ endif
 
 CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP
 
-GENERATED:=omemo0.c omemo0.h omemo2.c omemo2.h
+GENERATED:=gen/omemo0.c \
+           gen/omemo0.h \
+           gen/omemo2.c \
+           gen/omemo2.h
+
 OMEMOSRCS:=c25519.c hacl.c omemo.c
 
 all: $(GENERATED) o/picomemo0.so o/picomemo2.so tags
@@ -46,14 +49,14 @@ o:
 SO_BUILD=$(CC) -shared -o $@ $^ $(CFLAGS) $(OMEMOCFLAGS) -fvisibility=hidden $(LDFLAGS) $(LIBS)
 EXPORTDEF:="__attribute__((visibility(\"default\")))"
 
-o/picomemo0.so: omemo0.c $(DRIVERS) | o
+o/picomemo0.so: gen/omemo0.c $(DRIVERS) | o
 	$(SO_BUILD) -DOMEMO0_EXPORT=$(EXPORTDEF)
 
-o/picomemo2.so: omemo2.c $(DRIVERS) | o
+o/picomemo2.so: gen/omemo2.c $(DRIVERS) | o
 	$(SO_BUILD) -DOMEMO2_EXPORT=$(EXPORTDEF)
 
-$(GENERATED): omemo.c omemo.h split.lua
-	lua split.lua
+$(GENERATED) &: omemo.c omemo.h gen/split.lua
+	lua gen/split.lua
 
 ### MBEDTLS VENDORING ###
 

@@ -9,12 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: verify
-      run: ./test/verify.sh
     - name: install
       run: |
         sudo rm -f /var/lib/man-db/auto-update
         sudo ./test/install.sh
+    - name: verify
+      run: ./test/verify.sh
     - name: test
       run: ./test/all.sh
     - name: platforms

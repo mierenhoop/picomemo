@@ -51,11 +51,9 @@
   (OMEMO0_INTERNAL_FULLMSG_MAXSIZE + 8)
 
 
-
 typedef uint8_t omemo0Key[32];
 
 typedef uint8_t omemo0SerializedKey[1 + 32];
-
 typedef uint8_t omemo0CurveSignature[64];
 
 struct omemo0KeyPair {
@@ -265,7 +263,6 @@ OMEMO0_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
                                      size_t n);
 
 
-
 /**
  * Decrypt message taken from the <payload> element.
  *
@@ -280,8 +277,11 @@ OMEMO0_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n);
 
-
 int omemoDriverHmac(const omemo0Key k, const uint8_t *in, size_t ilen, uint8_t out[static 32]);
+int omemoDriverAesEncrypt(omemo0Key k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d);
+int omemoDriverAesDecrypt(omemo0Key k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d);
 int omemoDriverHkdf(const uint8_t *salt, size_t saltn, const uint8_t *key, size_t keyn, const uint8_t *info, size_t infon, uint8_t *out, size_t outn);
+int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], uint8_t tag[static 16], const uint8_t *s);
 int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s);
+int omemoDriverCompare(const void *a, const void *b, size_t n);
 #endif

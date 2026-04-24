@@ -40,7 +40,6 @@
 #define OMEMO2_ERANDOM   (-9)
 
 
-
 #define OMEMO2_KEYSIZE                        48
 #define OMEMO2_INTERNAL_PAYLOAD_MAXPADDEDSIZE 64
 #define OMEMO2_INTERNAL_HEADER_MAXSIZE        (2 * 6 + 34 + 2)
@@ -51,11 +50,8 @@
   (2 + 16 + 2 + OMEMO2_INTERNAL_FULLMSG_MAXSIZE)
 
 
-
 typedef uint8_t omemo2Key[32];
-
 typedef uint8_t omemo2SerializedKey[32];
-
 typedef uint8_t omemo2CurveSignature[64];
 
 struct omemo2KeyPair {
@@ -251,7 +247,6 @@ OMEMO2_EXPORT int omemo2Heartbeat(struct omemo2Session *session,
                                 const struct omemo2Store *store,
                                 struct omemo2KeyMessage *msg);
 
-
 #define omemo2GetMessagePadSize(n) (16 - (n % 16))
 /**
  * Encrypt message which will be stored in the <payload> element.
@@ -267,8 +262,6 @@ OMEMO2_EXPORT int omemo2Heartbeat(struct omemo2Session *session,
 OMEMO2_EXPORT int omemo2EncryptMessage(uint8_t *d, uint8_t key[48],
                                      uint8_t *s, size_t n);
 
-
-
 /**
  * Decrypt message taken from the <payload> element.
  *
@@ -282,8 +275,11 @@ OMEMO2_EXPORT int omemo2DecryptMessage(uint8_t *d, size_t *outn,
                                      const uint8_t *key, size_t keyn,
                                      const uint8_t *s, size_t n);
 
-
 int omemoDriverHmac(const omemo2Key k, const uint8_t *in, size_t ilen, uint8_t out[static 32]);
+int omemoDriverAesEncrypt(omemo2Key k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d);
+int omemoDriverAesDecrypt(omemo2Key k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d);
 int omemoDriverHkdf(const uint8_t *salt, size_t saltn, const uint8_t *key, size_t keyn, const uint8_t *info, size_t infon, uint8_t *out, size_t outn);
+int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], uint8_t tag[static 16], const uint8_t *s);
 int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s);
+int omemoDriverCompare(const void *a, const void *b, size_t n);
 #endif

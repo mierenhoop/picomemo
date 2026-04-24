@@ -16,11 +16,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <mbedtls/aes.h>
-#include <mbedtls/constant_time.h>
-#include <mbedtls/gcm.h>
-#include <mbedtls/hkdf.h>
-
 #ifdef __linux__
 #include <sys/random.h>
 #endif
@@ -581,18 +576,6 @@ static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
   return 0;
 }
 
-static void AesCbc(int mode, uint8_t key[static 32], size_t n,
-                   uint8_t iv[static 16], const uint8_t *s,
-                   uint8_t *d) {
-  // Errors are input validations, so we can assert
-  mbedtls_aes_context aes;
-  if (mode == MBEDTLS_AES_DECRYPT)
-    ASSERT(!mbedtls_aes_setkey_dec(&aes, key, 256));
-  else
-    ASSERT(!mbedtls_aes_setkey_enc(&aes, key, 256));
-  ASSERT(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
-}
-
 #define GetPad(n) (16 - ((n) % 16))
 
 static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
@@ -602,7 +585,7 @@ static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
   int pad = GetPad(n);
   memcpy(tmp, in, n);
   memset(tmp + n, pad, pad);
-  AesCbc(MBEDTLS_AES_ENCRYPT, key, n + pad, iv, tmp, out);
+  TRY(omemoDriverAesEncrypt(key, n+pad, iv, tmp, out));
   return n + pad;
 }
 
@@ -955,11 +938,11 @@ static int DecryptKeyImpl(struct omemoSession *session,
   TRY(GetMac(mac, session->remoteidentity, session->identity,
              kdfout->mac, msg, msgn - 8));
 #endif
-  if (mbedtls_ct_memcmp(mac, realmac, MACSIZE))
+  if (omemoDriverCompare(mac, realmac, MACSIZE))
     return OMEMO_ECORRUPT;
   uint8_t tmp[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
-  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, encn, kdfout->iv,
-         fields[PbMsg_ciphertext].p, tmp);
+  TRY(omemoDriverAesDecrypt(kdfout->cipher, encn, kdfout->iv,
+         fields[PbMsg_ciphertext].p, tmp));
   uint8_t pad = tmp[encn - 1];
   if (pad > 16 || pad > encn || encn - pad > *keyn)
     return OMEMO_ECORRUPT;
@@ -1102,10 +1085,9 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen,
   TRY(DeriveKey(Zero32, k, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
   TRY(omemoDriverHmac(kdfout->mac, s, n, mac));
-  if (mbedtls_ct_memcmp(mac, key + 32, 16))
+  if (omemoDriverCompare(mac, key + 32, 16))
     return OMEMO_ECORRUPT;
-  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, n, kdfout->iv, s, d);
-
+  TRY(omemoDriverAesDecrypt(kdfout->cipher, n, kdfout->iv, s, d));
   uint8_t p = d[n - 1];
   if (p > n)
     return OMEMO_ECORRUPT;
@@ -1122,7 +1104,7 @@ int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
   int r = 0;
   if (keyn < 32)
     return OMEMO_ECORRUPT;
-  omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s);
+  TRY(omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s));
   return r ? OMEMO_ECRYPTO : 0;
 }
 #endif
@@ -1139,8 +1121,7 @@ int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
   // PKCS#7
   size_t extend = omemoGetMessagePadSize(n);
   memset(s + n, extend, extend);
-  AesCbc(MBEDTLS_AES_ENCRYPT, kdfout->cipher, n + extend, kdfout->iv, s,
-         d);
+  TRY(omemoDriverAesEncrypt(kdfout->cipher, n + extend, kdfout->iv, s, d));
   uint8_t mac[32];
   TRY(omemoDriverHmac(kdfout->mac, d, n + extend, mac));
   memcpy(key, k, 32);
@@ -1156,14 +1137,7 @@ int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
   int r = 0;
   if ((r = omemoRandom(key, 16)) || (r = omemoRandom(iv, 12)))
     return r;
-  mbedtls_gcm_context ctx;
-  mbedtls_gcm_init(&ctx);
-  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key,
-                               128)))
-    r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, iv, 12,
-                                  "", 0, s, d, 16, key + 16);
-  mbedtls_gcm_free(&ctx);
-  return r ? OMEMO_ECRYPTO : 0;
+  return omemoDriverGcmEncrypt(d, key, n, iv, key + 16, s);
 }
 #endif
 

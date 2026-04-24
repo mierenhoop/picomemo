@@ -16,11 +16,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <mbedtls/aes.h>
-#include <mbedtls/constant_time.h>
-#include <mbedtls/gcm.h>
-#include <mbedtls/hkdf.h>
-
 #ifdef __linux__
 #include <sys/random.h>
 #endif
@@ -40,7 +35,6 @@
 #include "omemo2.h"
 
 
-
 #define HkdfInfoKeyExchange "OMEMO X3DH"
 #define HkdfInfoRootChain   "OMEMO Root Chain"
 #define HkdfInfoMessageKeys "OMEMO Message Key Material"
@@ -56,7 +50,6 @@
 #define PbKeyEx_ik      3
 #define PbKeyEx_ek      4
 #define PbKeyEx_message 5
-
 
 
 #ifdef OMEMO2_NOHACL
@@ -139,15 +132,11 @@ void omemo2SetCallbacks(omemo2LoadMessageKeyCallback lmk,
 
 void omemo2SerializeKey(omemo2SerializedKey k,
                                     const omemo2Key pub) {
-
   memcpy(k, pub, SerLen);
-
 }
 
 static inline const uint8_t *GetRawKey(const omemo2SerializedKey k) {
-
   return k;
-
 }
 
 /***************************** PROTOBUF ******************************/
@@ -297,7 +286,6 @@ static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id,
 }
 
 
-
 static uint8_t *FormatKey(uint8_t d[static 34], int id,
                           const omemo2Key k) {
   ASSERT(id < 16);
@@ -315,14 +303,12 @@ static size_t FormatPreKeyMessage(
     uint32_t pk_id, uint32_t spk_id, const omemo2Key ik,
     const omemo2Key ek, uint32_t msgsz) {
   uint8_t *p = d;
-
   p = FormatVarInt(p, PB_UINT32, 1, pk_id);
   p = FormatVarInt(p, PB_UINT32, 2, spk_id);
   p = FormatKey(p, 3, ik);
   p = FormatKey(p, 4, ek);
   // msgsz can be > 127 so we reserve 3 bytes for this
   p = FormatVarInt(p, PB_LEN, 5, msgsz);
-
   return p - d;
 }
 
@@ -333,12 +319,10 @@ FormatMessageHeader(uint8_t d[static OMEMO2_INTERNAL_HEADER_MAXSIZE],
                     uint32_t n, uint32_t pn, const omemo2Key dhs,
                     size_t keyn) {
   uint8_t *p = d;
-
   p = FormatVarInt(p, PB_UINT32, 1, n);
   p = FormatVarInt(p, PB_UINT32, 2, pn);
   p = FormatKey(p, 3, dhs);
   p = FormatVarInt(p, PB_LEN, 4, keyn);
-
   return p - d;
 }
 
@@ -387,9 +371,7 @@ static int CalculateCurveSignature(omemo2CurveSignature sig,
   omemo2Key ikprv, ikpub;
   memcpy(ikprv, ik->prv, 32);
   memcpy(ikpub, ik->pub, 32);
-
   SignModified(sig, ikpub, ikprv, msgbuf, msgn);
-
   return 0;
 }
 
@@ -404,9 +386,7 @@ static bool VerifySignature(const omemo2CurveSignature sig,
   memcpy(pubcpy, pub, 32);
   omemo2CurveSignature sig2;
   memcpy(sig2, sig, 64);
-
   return VerifyEd(sig2, pubcpy, msgbuf, msgn);
-
 }
 
 static int GenerateKeyPair(struct omemo2KeyPair *kp) {
@@ -418,14 +398,12 @@ static int GenerateKeyPair(struct omemo2KeyPair *kp) {
   return 0;
 }
 
-
 static int GenerateEdKeyPair(struct omemo2KeyPair *kp) {
   omemo2Key seed;
   TRY(omemo2Random(seed, 32));
   MakeEdKeys(kp->pub, kp->prv, seed);
   return 0;
 }
-
 
 static int GenerateSignedPreKey(struct omemo2SignedPreKey *spk,
                                 uint32_t id,
@@ -467,9 +445,7 @@ static int omemo2SetupStoreImpl(struct omemo2Store *store) {
   if (!store)
     return OMEMO2_EPARAM;
   memset(store, 0, sizeof(struct omemo2Store));
-
   TRY(GenerateEdKeyPair(&store->identity));
-
   TRY(GenerateSignedPreKey(&store->cursignedprekey, 1,
                            &store->identity));
   TRY(omemo2RefillPreKeys(store));
@@ -489,9 +465,7 @@ int omemo2SetupStore(struct omemo2Store *store) {
 /*********************************************************************/
 
 #define ADSIZE (2 * SerLen)
-
 #define MACSIZE 16
-
 
 //  AD = Encode(IKA) || Encode(IKB)
 static void GetAd(uint8_t ad[static ADSIZE], const omemo2Key ika,
@@ -517,18 +491,6 @@ static int GetMac(uint8_t d[static MACSIZE], const omemo2Key ika,
   return 0;
 }
 
-static void AesCbc(int mode, uint8_t key[static 32], size_t n,
-                   uint8_t iv[static 16], const uint8_t *s,
-                   uint8_t *d) {
-  // Errors are input validations, so we can assert
-  mbedtls_aes_context aes;
-  if (mode == MBEDTLS_AES_DECRYPT)
-    ASSERT(!mbedtls_aes_setkey_dec(&aes, key, 256));
-  else
-    ASSERT(!mbedtls_aes_setkey_enc(&aes, key, 256));
-  ASSERT(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
-}
-
 #define GetPad(n) (16 - ((n) % 16))
 
 static int Encrypt(uint8_t out[OMEMO2_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
@@ -538,7 +500,7 @@ static int Encrypt(uint8_t out[OMEMO2_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
   int pad = GetPad(n);
   memcpy(tmp, in, n);
   memset(tmp + n, pad, pad);
-  AesCbc(MBEDTLS_AES_ENCRYPT, key, n + pad, iv, tmp, out);
+  TRY(omemoDriverAesEncrypt(key, n+pad, iv, tmp, out));
   return n + pad;
 }
 
@@ -579,24 +541,20 @@ static int EncryptKeyImpl(struct omemo2Session *session,
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   msg->n = 0;
-
   msg->p[msg->n++] = (1 << 3) | PB_LEN;
   msg->p[msg->n++] = 16;
   msg->n += 16;
   msg->p[msg->n++] = (2 << 3) | PB_LEN;
   // Hmac'd message will always be smaller than 128
   msg->p[msg->n++] = 0x55; // replaced with actual size
-
   msg->n += FormatMessageHeader(
       msg->p + msg->n, session->state.ns, session->state.pn,
       session->state.dhs.pub, keyn + GetPad(keyn));
   msg->n +=
       Encrypt(msg->p + msg->n, key, keyn, kdfout->cipher, kdfout->iv);
-
   msg->p[19] = msg->n - 20;
   TRY(GetMac(msg->p + 2, session->identity, session->remoteidentity,
              kdfout->mac, msg->p + 20, msg->n - 20));
-
   session->state.ns++;
   if (session->init == SESSION_INIT) {
     msg->isprekey = true;
@@ -697,14 +655,12 @@ int omemo2InitiateSession(struct omemo2Session *session,
   struct omemo2KeyPair eka;
   TRY(GenerateKeyPair(&eka));
   omemo2Key sk;
-
   omemo2Key ikx, edy;
   memcpy(edy, GetRawKey(ik), 32);
   edy[31] &= 0x7f;
   MapToMont(ikx, edy);
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       ikx, GetRawKey(spk), GetRawKey(pk)));
-
   int r = RatchetInitAlice(&session->state, sk, GetRawKey(spk), &eka);
   if (r) {
     memset(&session->state, 0, sizeof(struct omemo2State));
@@ -800,7 +756,6 @@ static int SkipMessageKeys(struct omemo2Session *session, uint32_t n,
 static int DecryptKeyImpl(struct omemo2Session *session,
                           uint8_t *key, size_t *keyn,
                           const uint8_t *msg, size_t msgn) {
-
   struct ProtobufField fields1[3] = {
       [1] = {PB_REQUIRED | PB_LEN, 16}, // mac
       [2] = {PB_REQUIRED | PB_LEN},     // message
@@ -817,7 +772,6 @@ static int DecryptKeyImpl(struct omemo2Session *session,
   if (ParseProtobuf(fields1[2].p, fields1[2].v, fields, 5))
     return OMEMO2_EPROTOBUF;
   const uint8_t *realmac = fields1[1].p;
-
 
   uint32_t encn = fields[PbMsg_ciphertext].v;
   if (encn < 16 || encn % 16 ||
@@ -865,15 +819,13 @@ static int DecryptKeyImpl(struct omemo2Session *session,
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   uint8_t mac[MACSIZE];
-
   TRY(GetMac(mac, session->remoteidentity, session->identity,
              kdfout->mac, fields1[2].p, fields1[2].v));
-
-  if (mbedtls_ct_memcmp(mac, realmac, MACSIZE))
+  if (omemoDriverCompare(mac, realmac, MACSIZE))
     return OMEMO2_ECORRUPT;
   uint8_t tmp[OMEMO2_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
-  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, encn, kdfout->iv,
-         fields[PbMsg_ciphertext].p, tmp);
+  TRY(omemoDriverAesDecrypt(kdfout->cipher, encn, kdfout->iv,
+         fields[PbMsg_ciphertext].p, tmp));
   uint8_t pad = tmp[encn - 1];
   if (pad > 16 || pad > encn || encn - pad > *keyn)
     return OMEMO2_ECORRUPT;
@@ -893,7 +845,6 @@ static int DecryptGenericKeyImpl(struct omemo2Session *session,
     // Can't receive prekey when we sent a prekey...
     if (session->init == SESSION_INIT)
       return OMEMO2_ESTATE;
-
     // OMEMOKeyExchange
     struct ProtobufField fields[6] = {
         [PbKeyEx_pk_id] = {PB_REQUIRED | PB_UINT32},
@@ -904,7 +855,6 @@ static int DecryptGenericKeyImpl(struct omemo2Session *session,
     };
     if (ParseProtobuf(msg, msgn, fields, 6))
       return OMEMO2_EPROTOBUF;
-
     if (session->init == SESSION_UNINIT) {
       pk = FindPreKey(store, fields[PbKeyEx_pk_id].v);
       const struct omemo2SignedPreKey *spk =
@@ -916,7 +866,6 @@ static int DecryptGenericKeyImpl(struct omemo2Session *session,
       memcpy(session->identity, store->identity.pub, 32);
       memcpy(session->remoteidentity, GetRawKey(fields[PbKeyEx_ik].p),
              32);
-
       omemo2Key ik, edy;
       memcpy(edy, fields[PbKeyEx_ik].p, 32);
       edy[31] &= 0x7f;
@@ -924,7 +873,6 @@ static int DecryptGenericKeyImpl(struct omemo2Session *session,
       TRY(GetSharedSecret(sk, true, store->identity.prv, spk->kp.prv,
                           pk->kp.prv, ik, fields[PbKeyEx_ek].p,
                           fields[PbKeyEx_ek].p));
-
       RatchetInitBob(&session->state, sk, &spk->kp);
     }
     msg = fields[PbKeyEx_message].p;
@@ -981,7 +929,6 @@ int omemo2Heartbeat(struct omemo2Session *session,
 
 /******************** MESSAGE CONTENT ENCRYPTION *********************/
 
-
 int omemo2DecryptMessage(uint8_t *d, size_t *olen,
                                      const uint8_t *key, size_t keyn,
                                      const uint8_t *s, size_t n) {
@@ -997,10 +944,9 @@ int omemo2DecryptMessage(uint8_t *d, size_t *olen,
   TRY(DeriveKey(Zero32, k, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
   TRY(omemoDriverHmac(kdfout->mac, s, n, mac));
-  if (mbedtls_ct_memcmp(mac, key + 32, 16))
+  if (omemoDriverCompare(mac, key + 32, 16))
     return OMEMO2_ECORRUPT;
-  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, n, kdfout->iv, s, d);
-
+  TRY(omemoDriverAesDecrypt(kdfout->cipher, n, kdfout->iv, s, d));
   uint8_t p = d[n - 1];
   if (p > n)
     return OMEMO2_ECORRUPT;
@@ -1008,8 +954,6 @@ int omemo2DecryptMessage(uint8_t *d, size_t *olen,
   *olen = n - p;
   return 0;
 }
-
-
 
 int omemo2EncryptMessage(uint8_t *d, uint8_t key[48],
                                      uint8_t *s, size_t n) {
@@ -1022,15 +966,13 @@ int omemo2EncryptMessage(uint8_t *d, uint8_t key[48],
   // PKCS#7
   size_t extend = omemo2GetMessagePadSize(n);
   memset(s + n, extend, extend);
-  AesCbc(MBEDTLS_AES_ENCRYPT, kdfout->cipher, n + extend, kdfout->iv, s,
-         d);
+  TRY(omemoDriverAesEncrypt(kdfout->cipher, n + extend, kdfout->iv, s, d));
   uint8_t mac[32];
   TRY(omemoDriverHmac(kdfout->mac, d, n + extend, mac));
   memcpy(key, k, 32);
   memcpy(key + 32, mac, 16);
   return 0;
 }
-
 
 /************************** SERIALIZATION ****************************/
 

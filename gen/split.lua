@@ -11,6 +11,6 @@ for _,ext in ipairs{".c",".h"} do
     s=s:gsub("omemo(%u)",version.."%1")
     -- Don't change omemoDriver
     s=s:gsub(version.."Driver","omemoDriver")
-    io.open(version..ext,"w"):write(s)
+    io.open("gen/"..version..ext,"w"):write(s)
   end
 end

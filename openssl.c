@@ -24,7 +24,8 @@ int omemoDriverHmac(const omemoKey k, const uint8_t *in, size_t ilen, uint8_t ou
 int omemoDriverAesEncrypt(omemoKey k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d) {
   int len, final_len;
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-  EVP_EncryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, k, iv);
+  EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, k, iv);
+  EVP_CIPHER_CTX_set_padding(ctx, 0);
   EVP_EncryptUpdate(ctx, d, &len, s, n);
   EVP_EncryptFinal_ex(ctx, d + len, &final_len);
   EVP_CIPHER_CTX_free(ctx);
@@ -34,7 +35,8 @@ int omemoDriverAesEncrypt(omemoKey k, size_t n, uint8_t iv[static 16], const uin
 int omemoDriverAesDecrypt(omemoKey k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d) {
   int len, final_len;
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-  EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, k, iv);
+  EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, k, iv);
+  EVP_CIPHER_CTX_set_padding(ctx, 0);
   EVP_DecryptUpdate(ctx, d, &len, s, n);
   EVP_DecryptFinal_ex(ctx, d + len, &final_len);
   EVP_CIPHER_CTX_free(ctx);
@@ -57,6 +59,19 @@ int omemoDriverHkdf(const uint8_t *salt, size_t saltn, const uint8_t *key, size_
   return 0;
 }
 
+int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], uint8_t tag[static 16], const uint8_t *s) {
+  int len, final_len;
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  EVP_EncryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL);
+  EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL);
+  EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv);
+  EVP_EncryptUpdate(ctx, d, &len, s, n);
+  int _r = EVP_DecryptFinal_ex(ctx, d + len, &final_len);
+  EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, (void*)tag);
+  EVP_CIPHER_CTX_free(ctx);
+  return 0;
+}
+
 int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s) {
   int len, final_len;
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
@@ -69,4 +84,8 @@ int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, co
   int _r = EVP_DecryptFinal_ex(ctx, d + len, &final_len);
   EVP_CIPHER_CTX_free(ctx);
   return 0;
+}
+
+int omemoDriverCompare(const void *a, const void *b, size_t n) {
+  return CRYPTO_memcmp(a, b, n);
 }

@@ -472,10 +472,8 @@ static void TestHkdf() {
                    0xd5, 0xb8, 0x87, 0x18, 0x58, 0x65};
 
   uint8_t out[sizeof(okm)];
-  assert(mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
-                      salt, sizeof(salt), ikm, sizeof(ikm), info,
-                      sizeof(info), out,
-                      sizeof(okm)) == 0);
+  assert(omemoDriverHkdf(salt, sizeof(salt), ikm, sizeof(ikm), info,
+                         sizeof(info), out, sizeof(okm)) == 0);
   assert(!memcmp(okm, out, sizeof(okm)));
 }
 
@@ -488,7 +486,7 @@ static int GetSharedSecretWithoutPreKey(omemoKey rk, omemoKey ck, bool isbob, co
   assert(!DoX25519(secret+96, ska, spkb));
   memset(salt, 0, 32);
   uint8_t full[64];
-  if (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, 32, secret, sizeof(secret), "WhisperText", 11, full, 64) != 0)
+  if (omemoDriverHkdf(salt, 32, secret, sizeof(secret), "WhisperText", 11, full, 64) != 0)
     return OMEMO_ECRYPTO;
   memcpy(rk, full, 32);
   memcpy(ck, full+32, 32);

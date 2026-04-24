@@ -16,11 +16,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <mbedtls/aes.h>
-#include <mbedtls/constant_time.h>
-#include <mbedtls/gcm.h>
-#include <mbedtls/hkdf.h>
-
 #ifdef __linux__
 #include <sys/random.h>
 #endif
@@ -55,7 +50,6 @@
 #define PbKeyEx_ik      3
 #define PbKeyEx_ek      2
 #define PbKeyEx_message 4
-
 
 
 #ifdef OMEMO0_NOHACL
@@ -141,13 +135,11 @@ void omemo0SerializeKey(omemo0SerializedKey k,
 
   k[0] = 5;
   memcpy(k + 1, pub, SerLen - 1);
-
 }
 
 static inline const uint8_t *GetRawKey(const omemo0SerializedKey k) {
 
   return k + 1;
-
 }
 
 /***************************** PROTOBUF ******************************/
@@ -296,7 +288,6 @@ static uint8_t *FormatVarInt(uint8_t d[static 6], int type, int id,
   return d;
 }
 
-
 static uint8_t *FormatSerializedKey(uint8_t d[static 35], int id,
                                     const omemo0Key k) {
   ASSERT(id < 16);
@@ -305,7 +296,6 @@ static uint8_t *FormatSerializedKey(uint8_t d[static 35], int id,
   omemo0SerializeKey(d, k);
   return d + 33;
 }
-
 
 static uint8_t *FormatKey(uint8_t d[static 34], int id,
                           const omemo0Key k) {
@@ -333,7 +323,6 @@ static size_t FormatPreKeyMessage(
   p = FormatSerializedKey(p, 2, ek);
   ASSERT(msgsz < 128);
   p = FormatVarInt(p, PB_LEN, 4, msgsz);
-
   return p - d;
 }
 
@@ -350,7 +339,6 @@ FormatMessageHeader(uint8_t d[static OMEMO0_INTERNAL_HEADER_MAXSIZE],
   p = FormatVarInt(p, PB_UINT32, 2, n);
   p = FormatVarInt(p, PB_UINT32, 3, pn);
   p = FormatVarInt(p, PB_LEN, 4, keyn);
-
   return p - d;
 }
 
@@ -406,7 +394,6 @@ static int CalculateCurveSignature(omemo0CurveSignature sig,
   SignModified(sig, ed, ikprv, msgbuf, msgn);
   sig[63] &= 0x7f;
   sig[63] |= sign;
-
   return 0;
 }
 
@@ -428,7 +415,6 @@ static bool VerifySignature(const omemo0CurveSignature sig,
   ed[31] |= sig[63] & 0x80;
   sig2[63] &= 0x7f;
   return VerifyEd(sig2, ed, msgbuf, msgn);
-
 }
 
 static int GenerateKeyPair(struct omemo0KeyPair *kp) {
@@ -439,7 +425,6 @@ static int GenerateKeyPair(struct omemo0KeyPair *kp) {
   CalcCurve25519(kp->pub, kp->prv);
   return 0;
 }
-
 
 
 static int GenerateSignedPreKey(struct omemo0SignedPreKey *spk,
@@ -484,7 +469,6 @@ static int omemo0SetupStoreImpl(struct omemo0Store *store) {
   memset(store, 0, sizeof(struct omemo0Store));
 
   TRY(GenerateKeyPair(&store->identity));
-
   TRY(GenerateSignedPreKey(&store->cursignedprekey, 1,
                            &store->identity));
   TRY(omemo0RefillPreKeys(store));
@@ -506,7 +490,6 @@ int omemo0SetupStore(struct omemo0Store *store) {
 #define ADSIZE (2 * SerLen)
 
 #define MACSIZE 8
-
 
 //  AD = Encode(IKA) || Encode(IKB)
 static void GetAd(uint8_t ad[static ADSIZE], const omemo0Key ika,
@@ -532,18 +515,6 @@ static int GetMac(uint8_t d[static MACSIZE], const omemo0Key ika,
   return 0;
 }
 
-static void AesCbc(int mode, uint8_t key[static 32], size_t n,
-                   uint8_t iv[static 16], const uint8_t *s,
-                   uint8_t *d) {
-  // Errors are input validations, so we can assert
-  mbedtls_aes_context aes;
-  if (mode == MBEDTLS_AES_DECRYPT)
-    ASSERT(!mbedtls_aes_setkey_dec(&aes, key, 256));
-  else
-    ASSERT(!mbedtls_aes_setkey_enc(&aes, key, 256));
-  ASSERT(!mbedtls_aes_crypt_cbc(&aes, mode, n, iv, s, d));
-}
-
 #define GetPad(n) (16 - ((n) % 16))
 
 static int Encrypt(uint8_t out[OMEMO0_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
@@ -553,7 +524,7 @@ static int Encrypt(uint8_t out[OMEMO0_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
   int pad = GetPad(n);
   memcpy(tmp, in, n);
   memset(tmp + n, pad, pad);
-  AesCbc(MBEDTLS_AES_ENCRYPT, key, n + pad, iv, tmp, out);
+  TRY(omemoDriverAesEncrypt(key, n+pad, iv, tmp, out));
   return n + pad;
 }
 
@@ -594,7 +565,6 @@ static int EncryptKeyImpl(struct omemo0Session *session,
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   msg->n = 0;
-
   msg->n += FormatMessageHeader(
       msg->p + msg->n, session->state.ns, session->state.pn,
       session->state.dhs.pub, keyn + GetPad(keyn));
@@ -604,7 +574,6 @@ static int EncryptKeyImpl(struct omemo0Session *session,
   TRY(GetMac(msg->p + msg->n, session->identity,
              session->remoteidentity, kdfout->mac, msg->p, msg->n));
   msg->n += 8;
-
   session->state.ns++;
   if (session->init == SESSION_INIT) {
     msg->isprekey = true;
@@ -708,7 +677,6 @@ int omemo0InitiateSession(struct omemo0Session *session,
 
   TRY(GetSharedSecret(sk, false, store->identity.prv, eka.prv, eka.prv,
                       GetRawKey(ik), GetRawKey(spk), GetRawKey(pk)));
-
   int r = RatchetInitAlice(&session->state, sk, GetRawKey(spk), &eka);
   if (r) {
     memset(&session->state, 0, sizeof(struct omemo0State));
@@ -817,7 +785,6 @@ static int DecryptKeyImpl(struct omemo0Session *session,
     return OMEMO0_EPROTOBUF;
   const uint8_t *realmac = msg + msgn - 8;
 
-
   uint32_t encn = fields[PbMsg_ciphertext].v;
   if (encn < 16 || encn % 16 ||
       encn > OMEMO0_INTERNAL_PAYLOAD_MAXPADDEDSIZE)
@@ -867,12 +834,11 @@ static int DecryptKeyImpl(struct omemo0Session *session,
 
   TRY(GetMac(mac, session->remoteidentity, session->identity,
              kdfout->mac, msg, msgn - 8));
-
-  if (mbedtls_ct_memcmp(mac, realmac, MACSIZE))
+  if (omemoDriverCompare(mac, realmac, MACSIZE))
     return OMEMO0_ECORRUPT;
   uint8_t tmp[OMEMO0_INTERNAL_PAYLOAD_MAXPADDEDSIZE];
-  AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, encn, kdfout->iv,
-         fields[PbMsg_ciphertext].p, tmp);
+  TRY(omemoDriverAesDecrypt(kdfout->cipher, encn, kdfout->iv,
+         fields[PbMsg_ciphertext].p, tmp));
   uint8_t pad = tmp[encn - 1];
   if (pad > 16 || pad > encn || encn - pad > *keyn)
     return OMEMO0_ECORRUPT;
@@ -906,7 +872,6 @@ static int DecryptGenericKeyImpl(struct omemo0Session *session,
     };
     if (ParseProtobuf(msg + 1, msgn - 1, fields, 7))
       return OMEMO0_EPROTOBUF;
-
     if (session->init == SESSION_UNINIT) {
       pk = FindPreKey(store, fields[PbKeyEx_pk_id].v);
       const struct omemo0SignedPreKey *spk =
@@ -923,7 +888,6 @@ static int DecryptGenericKeyImpl(struct omemo0Session *session,
                           pk->kp.prv, GetRawKey(fields[PbKeyEx_ik].p),
                           GetRawKey(fields[PbKeyEx_ek].p),
                           GetRawKey(fields[PbKeyEx_ek].p)));
-
       RatchetInitBob(&session->state, sk, &spk->kp);
     }
     msg = fields[PbKeyEx_message].p;
@@ -989,10 +953,9 @@ int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
   int r = 0;
   if (keyn < 32)
     return OMEMO0_ECORRUPT;
-  omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s);
+  TRY(omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s));
   return r ? OMEMO0_ECRYPTO : 0;
 }
-
 
 
 int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
@@ -1003,16 +966,8 @@ int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
   int r = 0;
   if ((r = omemo0Random(key, 16)) || (r = omemo0Random(iv, 12)))
     return r;
-  mbedtls_gcm_context ctx;
-  mbedtls_gcm_init(&ctx);
-  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key,
-                               128)))
-    r = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, n, iv, 12,
-                                  "", 0, s, d, 16, key + 16);
-  mbedtls_gcm_free(&ctx);
-  return r ? OMEMO0_ECRYPTO : 0;
+  return omemoDriverGcmEncrypt(d, key, n, iv, key + 16, s);
 }
-
 
 /************************** SERIALIZATION ****************************/
 
