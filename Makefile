@@ -24,7 +24,13 @@ endif
 endif
 
 ifneq ($(filter openssl.c,$(DRIVERS)),)
-LIBS+=-lssl -lcrypto
+# TODO: remove -lmbedcrypto
+LIBS+=-lssl -lcrypto -lmbedcrypto
+endif
+
+# TODO: remove this by having these function behind omemoDriver* also
+ifneq ($(filter c25519.c,$(DRIVERS)),)
+CFLAGS+=-DOMEMO_NOHACL
 endif
 
 CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP

@@ -5,8 +5,8 @@ all: test-omemo test-omemo2
 o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
 	$(CC) -o $@ test/xmpp.c example/yxml.c $(TESTCFLAGS) -Iexample -lmbedtls -lmbedcrypto -lmbedx509
 
-TESTOMEMO_DEPS=test/omemo.c c25519.c hacl.c omemo.c
-TESTOMEMO_BUILD=$(CC) -o $@ test/omemo.c c25519.c hacl.c \
+TESTOMEMO_DEPS=test/omemo.c omemo.c $(sort c25519.c hacl.c $(DRIVERS))
+TESTOMEMO_BUILD=$(CC) -o $@ $(filter-out omemo.c, $(TESTOMEMO_DEPS)) \
 				$(TESTCFLAGS) $(OMEMOCFLAGS) $(LIBS)
 
 o/test-omemo: $(TESTOMEMO_DEPS) o/store.inc o/msg.bin
@@ -15,10 +15,10 @@ o/test-omemo: $(TESTOMEMO_DEPS) o/store.inc o/msg.bin
 o/test-omemo2: $(TESTOMEMO_DEPS) o/store2.inc o/msg2.bin
 	$(TESTOMEMO_BUILD) -DOMEMO2
 
-o/generate: test/generate.c $(OMEMOSRCS) | o
+o/generate: test/generate.c omemo.c $(DRIVERS) | o
 	$(CC) -o $@ $^ $(TESTCFLAGS) $(LIBS)
 
-o/generate2: test/generate.c $(OMEMOSRCS) | o
+o/generate2: test/generate.c omemo.c $(DRIVERS) | o
 	$(CC) -o $@ $^ $(TESTCFLAGS) $(LIBS) -DOMEMO2
 
 o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv/

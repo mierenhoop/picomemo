@@ -281,4 +281,7 @@ OMEMO0_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      const uint8_t *s, size_t n);
 
 
+int omemoDriverHmac(const omemo0Key k, const uint8_t *in, size_t ilen, uint8_t out[static 32]);
+int omemoDriverHkdf(const uint8_t *salt, size_t saltn, const uint8_t *key, size_t keyn, const uint8_t *info, size_t infon, uint8_t *out, size_t outn);
+int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s);
 #endif

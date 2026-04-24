@@ -564,13 +564,6 @@ static void GetAd(uint8_t ad[static ADSIZE], const omemoKey ika,
   omemoSerializeKey(ad + SerLen, ikb);
 }
 
-static void Hmac(const omemoKey k, const uint8_t *in, size_t ilen,
-                 uint8_t out[static 32]) {
-  // Only error return is from parameter verification so we can assert
-  ASSERT(!mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
-                          k, 32, in, ilen, out));
-}
-
 static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
                   const omemoKey ikb, const omemoKey mk,
                   const uint8_t *msg, size_t msgn) {
@@ -583,7 +576,7 @@ static int GetMac(uint8_t d[static MACSIZE], const omemoKey ika,
       mac[32];
   GetAd(macinput, ika, ikb);
   memcpy(macinput + ADSIZE, msg, msgn);
-  Hmac(mk, macinput, ADSIZE + msgn, mac);
+  TRY(omemoDriverHmac(mk, macinput, ADSIZE + msgn, mac));
   memcpy(d, mac, MACSIZE);
   return 0;
 }
@@ -616,11 +609,9 @@ static int Encrypt(uint8_t out[OMEMO_INTERNAL_PAYLOAD_MAXPADDEDSIZE],
 static const uint8_t Zero32[32];
 
 #define DeriveKey(salt, secret, info, out)                             \
-  (mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt,    \
+  omemoDriverHkdf(salt,    \
                 sizeof(salt), secret, sizeof(secret), info,            \
-                sizeof(info) - 1, (uint8_t *)out, sizeof(out))         \
-       ? OMEMO_ECRYPTO                                                 \
-       : 0)
+                sizeof(info) - 1, (uint8_t *)out, sizeof(out))
 
 struct __attribute__((__packed__)) DeriveChainKeyOutput {
   omemoKey cipher, mac;
@@ -629,12 +620,13 @@ struct __attribute__((__packed__)) DeriveChainKeyOutput {
 
 // d may be the same pointer as ck
 //  ck, mk = KDF_CK(ck)
-static void GetBaseMaterials(omemoKey d, omemoKey mk,
+static int GetBaseMaterials(omemoKey d, omemoKey mk,
                              const omemoKey ck) {
   uint8_t data[1] = {1};
-  Hmac(ck, data, 1, mk);
+  TRY(omemoDriverHmac(ck, data, 1, mk));
   data[0] = 2;
-  Hmac(ck, data, 1, d);
+  TRY(omemoDriverHmac(ck, data, 1, d));
+  return 0;
 }
 
 // CKs, mk = KDF_CK(CKs)
@@ -647,7 +639,7 @@ static int EncryptKeyImpl(struct omemoSession *session,
   if (!session->init)
     return OMEMO_ESTATE;
   omemoKey mk;
-  GetBaseMaterials(session->state.cks, mk, session->state.cks);
+  TRY(GetBaseMaterials(session->state.cks, mk, session->state.cks));
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, mk, HkdfInfoMessageKeys, kdfout));
   msg->n = 0;
@@ -867,7 +859,7 @@ static int SkipMessageKeys(struct omemoSession *session, uint32_t n,
                            uint64_t fullamount) {
   struct omemoMessageKey k;
   while (session->state.nr < n) {
-    GetBaseMaterials(session->state.ckr, k.mk, session->state.ckr);
+    TRY(GetBaseMaterials(session->state.ckr, k.mk, session->state.ckr));
     memcpy(k.dh, session->state.dhr, 32);
     k.nr = session->state.nr;
     TRY(omemoStoreMessageKey(session, &k, fullamount--));
@@ -950,7 +942,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
       TRY(DHRatchet(&session->state, headerdh));
     }
     TRY(SkipMessageKeys(session, headern, nskips));
-    GetBaseMaterials(session->state.ckr, mk, session->state.ckr);
+    TRY(GetBaseMaterials(session->state.ckr, mk, session->state.ckr));
     session->state.nr++;
   }
   struct DeriveChainKeyOutput kdfout[1];
@@ -1109,7 +1101,7 @@ int omemoDecryptMessage(uint8_t *d, size_t *olen,
   struct DeriveChainKeyOutput kdfout[1];
   TRY(DeriveKey(Zero32, k, HkdfInfoPayload, kdfout));
   uint8_t mac[32];
-  Hmac(kdfout->mac, s, n, mac);
+  TRY(omemoDriverHmac(kdfout->mac, s, n, mac));
   if (mbedtls_ct_memcmp(mac, key + 32, 16))
     return OMEMO_ECORRUPT;
   AesCbc(MBEDTLS_AES_DECRYPT, kdfout->cipher, n, kdfout->iv, s, d);
@@ -1130,13 +1122,7 @@ int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
   int r = 0;
   if (keyn < 32)
     return OMEMO_ECORRUPT;
-  mbedtls_gcm_context ctx;
-  mbedtls_gcm_init(&ctx);
-  if (!(r = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key,
-                               128)))
-    r = mbedtls_gcm_auth_decrypt(&ctx, n, iv, 12, "", 0, key + 16,
-                                 keyn - 16, s, d);
-  mbedtls_gcm_free(&ctx);
+  omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s);
   return r ? OMEMO_ECRYPTO : 0;
 }
 #endif
@@ -1156,7 +1142,7 @@ int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
   AesCbc(MBEDTLS_AES_ENCRYPT, kdfout->cipher, n + extend, kdfout->iv, s,
          d);
   uint8_t mac[32];
-  Hmac(kdfout->mac, d, n + extend, mac);
+  TRY(omemoDriverHmac(kdfout->mac, d, n + extend, mac));
   memcpy(key, k, 32);
   memcpy(key + 32, mac, 16);
   return 0;
