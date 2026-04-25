@@ -32,6 +32,7 @@
 #include "hacl.h"
 #endif
 
+#define OMEMO_IMPL
 #include "omemo.h"
 
 #ifdef OMEMO2
