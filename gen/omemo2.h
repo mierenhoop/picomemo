@@ -283,6 +283,15 @@ int omemoDriverHkdf(const uint8_t *salt, size_t saltn, const uint8_t *key, size_
 int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], uint8_t tag[static 16], const uint8_t *s);
 int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s);
 int omemoDriverCompare(const void *a, const void *b, size_t n);
+
+void omemoDriverEdSignMod(omemo2CurveSignature sig, omemo2Key pub, omemo2Key prv, uint8_t *msg, size_t msgn);
+void omemoDriverEdVerify(omemo2CurveSignature sig, omemo2Key pub, uint8_t *msg, size_t msgn);
+void omemoDriverEdSeedToPubPrv(omemo2Key pub, omemo2Key prv, omemo2Key seed);
+void omemoDriverEdPubToCvPub(omemo2Key cv, omemo2Key ed);
+void omemoDriverCvPrvToEdPub(omemo2Key pub, omemo2Key prv);
+void omemoDriverCvPubToEdPub(omemo2Key ed, omemo2Key cv);
+void omemoDriverCvPrvToPub(omemo2Key pub, omemo2Key prv);
+void omemoDriverX25519(omemo2Key out, omemo2Key prv, omemo2Key pub);
 #endif
 
 #endif

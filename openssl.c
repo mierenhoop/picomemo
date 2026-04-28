@@ -1,11 +1,9 @@
-#define OMEMO_IMPL
-#include "omemo.h"
-
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/kdf.h>
 
-// TODO: fix error handling
+#include "omemo.h"
+#include "driver.h"
 
 #define TRY(r) do { if ((r) != 1) goto a; } while (0)
 

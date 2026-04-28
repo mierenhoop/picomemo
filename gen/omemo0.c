@@ -55,23 +55,37 @@
 
 #ifdef OMEMO0_NOHACL
 
+// omemoDriverEdSignMod
 #define SignModified               edsign_sign_modified
+// omemoDriverCvPrvToEdPub
 #define MulPackEd                  edsign_sm_pack
+// omemoDriverEdVerify
 #define VerifyEd(sig, pub, msg, n) (!!edsign_verify(sig, pub, msg, n))
+// omemoDriverCvPubToEdPub
 #define MapToEd                    morph25519_mx2ey
+// omemoDriverEdSeedToPubPrv
 #define MakeEdKeys                 edsign_sec_to_pub
+// omemoDriverCvPrvToPub
 #define CalcCurve25519(pub, prv)   c25519_smult(pub, c25519_base_x, prv)
+// omemoDriverEdPubToCvPub
 #define MapToMont                  morph25519_e2m
 
 #else
 
+// omemoDriverEdSignMod
 #define SignModified               Hacl_Ed25519_sign_modified
+// omemoDriverCvPrvToEdPub
 #define MulPackEd                  Hacl_Ed25519_pub_from_Curve25519_priv
+// omemoDriverEdVerify
 #define VerifyEd(sig, pub, msg, n) Hacl_Ed25519_verify(pub, n, msg, sig)
+// omemoDriverCvPubToEdPub
 #define MapToEd                    Hacl_Curve25519_pub_to_Ed25519_pub
+// omemoDriverEdSeedToPubPrv
 #define MakeEdKeys                 Hacl_Ed25519_seed_to_pub_priv
+// omemoDriverCvPrvToPub
 #define CalcCurve25519(pub, prv)                                       \
   Hacl_Curve25519_51_secret_to_public(pub, prv)
+// omemoDriverEdPubToCvPub
 #define MapToMont Hacl_Ed25519_pub_to_Curve25519_pub
 
 #endif

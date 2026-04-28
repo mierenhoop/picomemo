@@ -1,10 +1,12 @@
+
+
 #include <mbedtls/aes.h>
 #include <mbedtls/constant_time.h>
 #include <mbedtls/gcm.h>
 #include <mbedtls/hkdf.h>
 
-#define OMEMO_IMPL
 #include "omemo.h"
+#include "driver.h"
 
 #define TRY(r) do { if (r) return OMEMO_ECRYPTO; } while (0)
 
