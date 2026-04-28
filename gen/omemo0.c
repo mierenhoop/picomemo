@@ -26,14 +26,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef OMEMO0_NOHACL
-#include "c25519.h"
-#else
-#include "hacl.h"
-#endif
-
-#define OMEMO0_IMPL
 #include "omemo0.h"
+#include "driver.h"
 
 
 
@@ -52,43 +46,6 @@
 #define PbKeyEx_ek      2
 #define PbKeyEx_message 4
 
-
-#ifdef OMEMO0_NOHACL
-
-// omemoDriverEdSignMod
-#define SignModified               edsign_sign_modified
-// omemoDriverCvPrvToEdPub
-#define MulPackEd                  edsign_sm_pack
-// omemoDriverEdVerify
-#define VerifyEd(sig, pub, msg, n) (!!edsign_verify(sig, pub, msg, n))
-// omemoDriverCvPubToEdPub
-#define MapToEd                    morph25519_mx2ey
-// omemoDriverEdSeedToPubPrv
-#define MakeEdKeys                 edsign_sec_to_pub
-// omemoDriverCvPrvToPub
-#define CalcCurve25519(pub, prv)   c25519_smult(pub, c25519_base_x, prv)
-// omemoDriverEdPubToCvPub
-#define MapToMont                  morph25519_e2m
-
-#else
-
-// omemoDriverEdSignMod
-#define SignModified               Hacl_Ed25519_sign_modified
-// omemoDriverCvPrvToEdPub
-#define MulPackEd                  Hacl_Ed25519_pub_from_Curve25519_priv
-// omemoDriverEdVerify
-#define VerifyEd(sig, pub, msg, n) Hacl_Ed25519_verify(pub, n, msg, sig)
-// omemoDriverCvPubToEdPub
-#define MapToEd                    Hacl_Curve25519_pub_to_Ed25519_pub
-// omemoDriverEdSeedToPubPrv
-#define MakeEdKeys                 Hacl_Ed25519_seed_to_pub_priv
-// omemoDriverCvPrvToPub
-#define CalcCurve25519(pub, prv)                                       \
-  Hacl_Curve25519_51_secret_to_public(pub, prv)
-// omemoDriverEdPubToCvPub
-#define MapToMont Hacl_Ed25519_pub_to_Curve25519_pub
-
-#endif
 
 #define TRY(expr)                                                      \
   do {                                                                 \
@@ -116,20 +73,22 @@ static omemo0LoadMessageKeyCallback  g_lmkcb;
 static omemo0StoreMessageKeyCallback g_smkcb;
 static omemo0RandomCallback          g_rndcb;
 
-static int omemo0LoadMessageKey(struct omemo0Session *s,
-                                     struct omemo0MessageKey *sk) {
+#define WEAK __attribute__((weak))
+
+int WEAK omemo0LoadMessageKey(struct omemo0Session *s,
+                             struct omemo0MessageKey *sk) {
   if (g_lmkcb) return g_lmkcb(s, sk);
   return 1;
 }
 
-static int omemo0StoreMessageKey(struct omemo0Session *s,
-                                      const struct omemo0MessageKey *sk,
-                                      uint64_t n) {
+int WEAK omemo0StoreMessageKey(struct omemo0Session *s,
+                              const struct omemo0MessageKey *sk,
+                              uint64_t n) {
   if (g_smkcb) return g_smkcb(s, sk, n);
   return 0;
 }
 
-static int omemo0Random(void *p, size_t n) {
+int WEAK omemo0Random(void *p, size_t n) {
   if (g_rndcb) return g_rndcb(p, n);
 #ifdef __linux__
   return getrandom(p, n, 0) == n ? 0 : OMEMO0_ERANDOM;
@@ -364,16 +323,10 @@ FormatMessageHeader(uint8_t d[static OMEMO0_INTERNAL_HEADER_MAXSIZE],
  */
 static int DoX25519(omemo0Key shared, const omemo0Key prv,
                     const omemo0Key pub) {
-#ifdef OMEMO0_NOHACL
-  c25519_smult(shared, pub, prv);
-  return !f25519_eq(shared, f25519_zero) ? 0 : OMEMO0_ECORRUPT;
-#else
   omemo0Key tmp, tmp2;
   memcpy(tmp, prv, 32);
   memcpy(tmp2, pub, 32);
-  return Hacl_Curve25519_51_ecdh(shared, tmp, tmp2) ? 0
-                                                    : OMEMO0_ECORRUPT;
-#endif
+  return omemoDriverX25519(shared, tmp, tmp2);
 }
 
 // For OMEMO 0.3, we use the sign_modified as is required.
@@ -404,9 +357,9 @@ static int CalculateCurveSignature(omemo0CurveSignature sig,
   memcpy(ikpub, ik->pub, 32);
 
   omemo0Key ed;
-  MulPackEd(ed, ikprv);
+  omemoDriverCvPrvToEdPub(ed, ikprv);
   int sign = ed[31] & 0x80;
-  SignModified(sig, ed, ikprv, msgbuf, msgn);
+  omemoDriverEdSignMod(sig, ed, ikprv, msgbuf, msgn);
   sig[63] &= 0x7f;
   sig[63] |= sign;
   return 0;
@@ -425,11 +378,11 @@ static bool VerifySignature(const omemo0CurveSignature sig,
   memcpy(sig2, sig, 64);
 
   omemo0Key ed;
-  MapToEd(ed, pubcpy);
+  omemoDriverCvPubToEdPub(ed, pubcpy);
   ed[31] &= 0x7f;
   ed[31] |= sig[63] & 0x80;
   sig2[63] &= 0x7f;
-  return VerifyEd(sig2, ed, msgbuf, msgn);
+  return omemoDriverEdVerify(sig2, ed, msgbuf, msgn);
 }
 
 static int GenerateKeyPair(struct omemo0KeyPair *kp) {
@@ -437,7 +390,7 @@ static int GenerateKeyPair(struct omemo0KeyPair *kp) {
   kp->prv[0] &= 0xf8;
   kp->prv[31] &= 0x7f;
   kp->prv[31] |= 0x40;
-  CalcCurve25519(kp->pub, kp->prv);
+  omemoDriverCvPrvToPub(kp->pub, kp->prv);
   return 0;
 }
 

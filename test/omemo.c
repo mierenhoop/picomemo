@@ -15,8 +15,6 @@
  */
 
 #include "../omemo.c"
-#include "../hacl.h"
-#include "../c25519.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -37,6 +35,12 @@ int Random(void *d, size_t n) {
     ((uint8_t*)d)[i] = rand();
   return 0;
 #endif
+}
+
+static void PrepareKey(omemoKey k) {
+  k[0] &= 0xf8;
+  k[31] &= 0x7f;
+  k[31] |= 0x40;
 }
 
 static void CopyHex(uint8_t *d, const char *hex) {
@@ -145,15 +149,12 @@ static void TestKeyPair(struct omemoKeyPair *kp, const char *rnd, const char *pr
   CopyHex(kp->prv, rnd);
   CopyHex(kprv, prv);
   CopyHex(kpub, pub);
-  c25519_prepare(kp->prv);
+  PrepareKey(kp->prv);
   assert(!memcmp(kp->prv, kprv, 32));
 #ifndef __SIZEOF_INT128__
 #warning "Not testing the faster curve25519 implementation because system doesn't support 128bit integers."
 #endif
-  c25519_smult(kp->pub, c25519_base_x, kprv);
-  assert(!memcmp(kpub, kp->pub, 32));
-  memset(kp->pub, 0, 32);
-  Hacl_Curve25519_51_secret_to_public(kp->pub, kprv);
+  omemoDriverCvPrvToPub(kp->pub, kprv);
   assert(!memcmp(kpub, kp->pub, 32));
 }
 
@@ -163,13 +164,9 @@ static void TestCurve25519() {
   TestKeyPair(&kpa, "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a", "70076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c6a", "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a");
   TestKeyPair(&kpb, "58ab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e06b", "58ab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e06b", "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
   CopyHex(expshared, "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
-  c25519_smult(shared, kpb.pub, kpa.prv);
+  assert(!omemoDriverX25519(shared, kpa.prv, kpb.pub));
   assert(!memcmp(expshared, shared, 32));
-  c25519_smult(shared, kpa.pub, kpb.prv);
-  assert(!memcmp(expshared, shared, 32));
-  assert(Hacl_Curve25519_51_ecdh(shared, kpa.prv, kpb.pub));
-  assert(!memcmp(expshared, shared, 32));
-  assert(Hacl_Curve25519_51_ecdh(shared, kpb.prv, kpa.pub));
+  assert(!omemoDriverX25519(shared, kpb.prv, kpa.pub));
   assert(!memcmp(expshared, shared, 32));
 }
 
@@ -215,64 +212,13 @@ static void TestSignature() {
 #ifndef OMEMO2
   uint8_t msg2[33];
   memset(ik.prv, 0x22, 32);
-  c25519_prepare(ik.prv);
+  PrepareKey(ik.prv);
   memset(msg2, 0xaa, 33);
   memset(rnd, 0x55, 64);
   CalculateCurveSignature(sig, &ik, rnd, msg2, 33);
   CopyHex(expsig, "f233b4ff4a5ba228980348fc07a49bdb26d4c88499015b29c604995cbe8c98351934e773569453d17ee000011e3662783d695f830b6a4bb49fb774c9b0599604");
   assert(!memcmp(expsig, sig, 64));
 #endif
-}
-
-void TestCurvePrvToEdPub() {
-  omemoKey prv, pub2, pub3;
-  memset(prv, 0xcc, 32);
-  c25519_prepare(prv);
-  edsign_sm_pack(pub2, prv);
-  Hacl_Ed25519_pub_from_Curve25519_priv(pub3, prv);
-  assert(!memcmp(pub2, pub3, 32));
-}
-
-void TestSignModified() {
-  omemoCurveSignature sig, sig2;
-  uint8_t msgbuf[32+64];
-  omemoKey seed, prv, pub;
-  memset(seed, 0xcc, 32);
-  memset(msgbuf, 0x55, 32);
-  memset(msgbuf+32, 0xaa, 64);
-  Hacl_Ed25519_seed_to_pub_priv(pub, prv, seed);
-  edsign_sign_modified(sig, pub, prv, msgbuf, 32);
-  Hacl_Ed25519_sign_modified(sig2, pub, prv, msgbuf, 32);
-  assert(!memcmp(sig, sig2, 64));
-}
-
-void TestEdPubToCurvePub() {
-  omemoKey seed, prv1, prv2, pub1, pub2, pub3, pub4;
-  memset(seed, 0xee, 32);
-  edsign_sec_to_pub(pub1, prv1, seed);
-  Hacl_Ed25519_seed_to_pub_priv(pub2, prv2, seed);
-  assert(!memcmp(prv1, prv2, 32));
-  assert(!memcmp(pub1, pub2, 32));
-  pub1[31] &= 0x7f;
-  pub2[31] &= 0x7f;
-  morph25519_e2m(pub3, pub1);
-  Hacl_Ed25519_pub_to_Curve25519_pub(pub4, pub2);
-  assert(!memcmp(pub3, pub4, 32));
-}
-
-void TestCurvePubToEdPub() {
-  struct omemoKeyPair kp;
-  omemoKey ed1, ed2;
-  assert(!GenerateKeyPair(&kp));
-  Hacl_Curve25519_pub_to_Ed25519_pub(ed1, kp.pub);
-  morph25519_mx2ey(ed2, kp.pub);
-  assert(!memcmp(ed1, ed2, 32));
-}
-
-void TestKeyConversions() {
-  TestCurvePrvToEdPub();
-  TestEdPubToCurvePub();
-  TestCurvePubToEdPub();
 }
 
 static void TestEncryption() {
@@ -642,8 +588,6 @@ int main() {
   RunTest(TestCurve25519);
   RunTest(TestRotate);
   RunTest(TestSignature);
-  RunTest(TestSignModified);
-  RunTest(TestKeyConversions);
   RunTest(TestEncryption);
   RunTest(TestHkdf);
   RunTest(TestRatchet);

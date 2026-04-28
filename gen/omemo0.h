@@ -119,6 +119,15 @@ typedef int (*omemo0StoreMessageKeyCallback)(
 
 typedef int (*omemo0RandomCallback)(void *p, size_t n);
 
+int omemo0LoadMessageKey(struct omemo0Session *s,
+                        struct omemo0MessageKey *sk);
+
+int omemo0StoreMessageKey(struct omemo0Session *s,
+                         const struct omemo0MessageKey *sk,
+                         uint64_t n);
+
+int omemo0Random(void *p, size_t n);
+
 /**
  * Set global callbacks for storing/loading skipped message keys and
  * random generation.
@@ -276,24 +285,5 @@ OMEMO0_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
 OMEMO0_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
                                      const uint8_t *s, size_t n);
-
-#ifdef OMEMO0_IMPL
-int omemoDriverHmac(const omemo0Key k, const uint8_t *in, size_t ilen, uint8_t out[static 32]);
-int omemoDriverAesEncrypt(omemo0Key k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d);
-int omemoDriverAesDecrypt(omemo0Key k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d);
-int omemoDriverHkdf(const uint8_t *salt, size_t saltn, const uint8_t *key, size_t keyn, const uint8_t *info, size_t infon, uint8_t *out, size_t outn);
-int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], uint8_t tag[static 16], const uint8_t *s);
-int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s);
-int omemoDriverCompare(const void *a, const void *b, size_t n);
-
-void omemoDriverEdSignMod(omemo0CurveSignature sig, omemo0Key pub, omemo0Key prv, uint8_t *msg, size_t msgn);
-void omemoDriverEdVerify(omemo0CurveSignature sig, omemo0Key pub, uint8_t *msg, size_t msgn);
-void omemoDriverEdSeedToPubPrv(omemo0Key pub, omemo0Key prv, omemo0Key seed);
-void omemoDriverEdPubToCvPub(omemo0Key cv, omemo0Key ed);
-void omemoDriverCvPrvToEdPub(omemo0Key pub, omemo0Key prv);
-void omemoDriverCvPubToEdPub(omemo0Key ed, omemo0Key cv);
-void omemoDriverCvPrvToPub(omemo0Key pub, omemo0Key prv);
-void omemoDriverX25519(omemo0Key out, omemo0Key prv, omemo0Key pub);
-#endif
 
 #endif

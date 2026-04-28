@@ -12,12 +12,12 @@ int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, co
 int omemoDriverCompare(const void *a, const void *b, size_t n);
 
 void omemoDriverEdSignMod(omemoCurveSignature sig, omemoKey pub, omemoKey prv, uint8_t *msg, size_t msgn);
-void omemoDriverEdVerify(omemoCurveSignature sig, omemoKey pub, uint8_t *msg, size_t msgn);
+bool omemoDriverEdVerify(omemoCurveSignature sig, omemoKey pub, uint8_t *msg, size_t msgn);
 void omemoDriverEdSeedToPubPrv(omemoKey pub, omemoKey prv, omemoKey seed);
 void omemoDriverEdPubToCvPub(omemoKey cv, omemoKey ed);
 void omemoDriverCvPrvToEdPub(omemoKey pub, omemoKey prv);
 void omemoDriverCvPubToEdPub(omemoKey ed, omemoKey cv);
 void omemoDriverCvPrvToPub(omemoKey pub, omemoKey prv);
-void omemoDriverX25519(omemoKey out, omemoKey prv, omemoKey pub);
+int  omemoDriverX25519(omemoKey out, omemoKey prv, omemoKey pub);
 
 #endif

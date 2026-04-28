@@ -36,7 +36,7 @@ cryptography. By default these are provided by
 
 As an alternative there is the
 [c25519](https://www.dlbeer.co.nz/oss/c25519.html) library, which is
-also included as amalgamation in `/c25519.c` and `/c25519.h`. This
+also included as amalgamation in `/c25519.c`. This
 library was designed for low-memory systems and is significantly slower
 on modern hardware than HACL\*.
 

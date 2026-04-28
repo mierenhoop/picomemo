@@ -5,7 +5,7 @@ all: test-omemo test-omemo2
 o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
 	$(CC) -o $@ test/xmpp.c example/yxml.c $(TESTCFLAGS) -Iexample -lmbedtls -lmbedcrypto -lmbedx509
 
-TESTOMEMO_DEPS=test/omemo.c omemo.c $(sort c25519.c hacl.c $(DRIVERS))
+TESTOMEMO_DEPS=test/omemo.c omemo.c $(DRIVERS)
 TESTOMEMO_BUILD=$(CC) -o $@ $(filter-out omemo.c, $(TESTOMEMO_DEPS)) \
 				$(TESTCFLAGS) $(OMEMOCFLAGS) $(LIBS)
 

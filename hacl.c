@@ -7722,12 +7722,15 @@ Hacl_Ed25519_verify(uint8_t *public_key, uint32_t msg_len, uint8_t *msg, uint8_t
 
 // OMEMO Additions
 
-void Hacl_Ed25519_sign_modified(
-  uint8_t *signature,
-  uint8_t *public_key,
-  uint8_t *s,
+#include "omemo.h"
+#include "driver.h"
+
+void omemoDriverEdSignMod(
+  omemoCurveSignature signature,
+  omemoKey public_key,
+  omemoKey s,
   uint8_t *msg,
-  uint32_t msg_len
+  size_t msg_len
 )
 {
   signature[0] = 0xfe;
@@ -7749,13 +7752,15 @@ void Hacl_Ed25519_sign_modified(
   store_56(ss, aq);
 }
 
-void Hacl_Ed25519_pub_from_Curve25519_priv(
-    uint8_t *pub,
-    uint8_t *sec) {
+bool omemoDriverEdVerify(omemoCurveSignature sig, omemoKey pub, uint8_t *msg, size_t msgn) {
+  return Hacl_Ed25519_verify(pub, msgn, msg, sig);
+}
+
+void omemoDriverCvPrvToEdPub(omemoKey pub, omemoKey sec) {
   point_mul_g_compress(pub, sec);
 }
 
-void Hacl_Ed25519_seed_to_pub_priv(uint8_t *public_key, uint8_t *private_key, uint8_t *seed)
+void omemoDriverEdSeedToPubPrv(omemoKey public_key, omemoKey private_key, omemoKey seed)
 {
   uint8_t expanded_secret[64U] = { 0U };
   secret_expand(expanded_secret, seed);
@@ -7764,23 +7769,17 @@ void Hacl_Ed25519_seed_to_pub_priv(uint8_t *public_key, uint8_t *private_key, ui
   memcpy(private_key, a, 32);
 }
 
-bool Hacl_Ed25519_pub_to_Curve25519_pub(
-    uint8_t *m,
-    uint8_t *e) {
-  uint64_t o[20], um[5], yplus[5], yminus[5], one[5] = {1,0,0,0,0};
-  if (!Hacl_Impl_Ed25519_PointDecompress_point_decompress(o, e))
-    return false;
-  fdifference(yplus, one, o+5);
+void omemoDriverEdPubToCvPub(omemoKey m, omemoKey e) {
+  uint64_t ey[5], um[5], yplus[5], yminus[5], one[5] = {1,0,0,0,0};
+  Hacl_Bignum25519_load_51(ey, e);
+  fdifference(yplus, one, ey);
   Hacl_Bignum25519_inverse(yminus, yplus);
-  fsum(yplus, one, o+5);
+  fsum(yplus, one, ey);
   fmul0(um, yplus, yminus);
   Hacl_Bignum25519_store_51(m, um);
-  return true;
 }
 
-void Hacl_Curve25519_pub_to_Ed25519_pub(
-    uint8_t *e,
-    uint8_t *m) {
+void omemoDriverCvPubToEdPub(omemoKey e, omemoKey m) {
   uint64_t ey[5], mx[5], n[5], d[5], one[5] = {1,0,0,0,0};
   Hacl_Bignum25519_load_51(mx, m);
   fsum(n, mx, one);
@@ -7788,4 +7787,12 @@ void Hacl_Curve25519_pub_to_Ed25519_pub(
   fdifference(n, mx, one);
   fmul0(ey, n, d);
   Hacl_Bignum25519_store_51(e, ey);
+}
+
+void omemoDriverCvPrvToPub(omemoKey pub, omemoKey prv) {
+  Hacl_Curve25519_51_secret_to_public(pub, prv);
+}
+
+int omemoDriverX25519(omemoKey out, omemoKey prv, omemoKey pub) {
+  return Hacl_Curve25519_51_ecdh(out, prv, pub) ? 0 : OMEMO_ECORRUPT;
 }

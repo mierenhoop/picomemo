@@ -34,7 +34,6 @@
 
 #include "../config.h"
 
-#include "c25519.h"
 #include "omemo.h"
 
 void ConnectWifi(void);
