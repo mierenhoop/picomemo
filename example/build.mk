@@ -26,7 +26,7 @@ endif
 ESPIDF_DOCKERCMD=docker run -it --rm -v ${PWD}:/project -u $(shell id -u) -w /project -e HOME=/tmp $(ESP_DEVARG) espressif/idf idf.py -B o/example-esp-im -C example/esp-im
 
 .PHONY: esp-im
-esp-im: | o
+esp-im: o/store.inc
 	$(ESPIDF_DOCKERCMD) build
 
 .PHONY: size-esp-im

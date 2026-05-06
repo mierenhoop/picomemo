@@ -1,6 +1,8 @@
 ### CONFIG ###
 #
-# make DRIVERS="hacl.c mbedtls.c" MBED_VENDOR=mbedtls
+# Example configurations:
+# $ DRIVERS="hacl.c openssl.c" CFLAGS="-O3" LDFLAGS="-flto" make
+# $ DRIVERS="hacl.c mbedtls.c" MBED_VENDOR=mbedtls          make
 #
 # For DRIVERS choose one of hacl.c OR c25519.c,
 #             AND one of mbedtls.c OR openssl.c
@@ -9,6 +11,10 @@
 # useful when you don't have mbedtls installed.
 # - Before that you have to $ make mbedtls && make -C mbedtls lib
 #
+###
+
+V:=1.2.0
+SO_VERSION:=1
 
 ifndef DRIVERS
 DRIVERS:=hacl.c mbedtls.c
@@ -27,11 +33,7 @@ ifneq ($(filter openssl.c,$(DRIVERS)),)
 LIBS+=-lssl -lcrypto
 endif
 
-# TODO: remove this by having these function behind omemoDriver* also
-ifneq ($(filter c25519.c,$(DRIVERS)),)
-CFLAGS+=-DOMEMO_NOHACL
-endif
-
+CFLAGS?=-O2 -g
 CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP
 
 GENERATED:=gen/omemo0.c \
@@ -41,19 +43,27 @@ GENERATED:=gen/omemo0.c \
 
 OMEMOSRCS:=c25519.c hacl.c omemo.c
 
-all: $(GENERATED) o/picomemo0.so o/picomemo2.so tags
+.PHONY: all
+all: $(GENERATED) libs tags
+
+.PHONY: libs
+libs: o/libpicomemo0.so.$V o/libpicomemo2.so.$V
 
 o:
 	mkdir -p o
 
-SO_BUILD=$(CC) -shared -o $@ $^ $(CFLAGS) $(OMEMOCFLAGS) -fvisibility=hidden $(LDFLAGS) $(LIBS)
+SO_BUILD=$(CC) -shared -o $@ $^ $(CFLAGS) $(OMEMOCFLAGS) $(LDFLAGS) \
+		 $(LIBS) -fPIC -fvisibility=hidden
+
 EXPORTDEF:="__attribute__((visibility(\"default\")))"
 
-o/picomemo0.so: gen/omemo0.c $(DRIVERS) | o
-	$(SO_BUILD) -DOMEMO0_EXPORT=$(EXPORTDEF)
+o/libpicomemo0.so.$V: gen/omemo0.c $(DRIVERS) | o
+	$(SO_BUILD) -DOMEMO0_EXPORT=$(EXPORTDEF) \
+		-Wl,-soname,libpicomemo0.so.$(SO_VERSION)
 
-o/picomemo2.so: gen/omemo2.c $(DRIVERS) | o
-	$(SO_BUILD) -DOMEMO2_EXPORT=$(EXPORTDEF)
+o/libpicomemo2.so.$V: gen/omemo2.c $(DRIVERS) | o
+	$(SO_BUILD) -DOMEMO2_EXPORT=$(EXPORTDEF) \
+		-Wl,-soname,libpicomemo2.so.$(SO_VERSION)
 
 $(GENERATED) &: omemo.c omemo.h gen/split.lua
 	lua gen/split.lua
@@ -69,6 +79,8 @@ mbedtls.tar.bz2:
 mbedtls: mbedtls.tar.bz2
 	rm -rf $@
 	tar -xjf $< --strip-components=1 --one-top-level=$@
+
+###
 
 .PHONY: tags
 tags:
