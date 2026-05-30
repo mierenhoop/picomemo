@@ -44,10 +44,10 @@ GENERATED:=gen/omemo0.c \
 OMEMOSRCS:=c25519.c hacl.c omemo.c
 
 .PHONY: all
-all: $(GENERATED) libs tags
+all: $(GENERATED) lib tags
 
-.PHONY: libs
-libs: o/libpicomemo0.so.$V o/libpicomemo2.so.$V
+.PHONY: lib
+lib: o/libpicomemo.so.$V
 
 o:
 	mkdir -p o
@@ -57,13 +57,9 @@ SO_BUILD=$(CC) -shared -o $@ $^ $(CFLAGS) $(OMEMOCFLAGS) $(LDFLAGS) \
 
 EXPORTDEF:="__attribute__((visibility(\"default\")))"
 
-o/libpicomemo0.so.$V: gen/omemo0.c $(DRIVERS) | o
-	$(SO_BUILD) -DOMEMO0_EXPORT=$(EXPORTDEF) \
-		-Wl,-soname,libpicomemo0.so.$(SO_VERSION)
-
-o/libpicomemo2.so.$V: gen/omemo2.c $(DRIVERS) | o
-	$(SO_BUILD) -DOMEMO2_EXPORT=$(EXPORTDEF) \
-		-Wl,-soname,libpicomemo2.so.$(SO_VERSION)
+o/libpicomemo.so.$V: gen/omemo0.c gen/omemo2.c $(DRIVERS) | o
+	$(SO_BUILD) -DOMEMO0_EXPORT=$(EXPORTDEF) -DOMEMO2_EXPORT=$(EXPORTDEF) \
+		-Wl,-soname,libpicomemo.so.$(SO_VERSION)
 
 $(GENERATED) &: omemo.c omemo.h gen/split.lua
 	lua gen/split.lua

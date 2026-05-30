@@ -71,7 +71,7 @@ For testing & development: docker-compose, Python, openssl,
 Compile libpicomemo0 and libpicomemo2:
 
 ```bash
-$ make libs
+$ make lib
 ```
 
 Run the tests:
@@ -207,6 +207,14 @@ extra security. This is *not* done by the library.
 This library can be compiled to WebAssembly using emscripten. Both
 crypto backends are supported, and since HACL\* is faster you should use
 that one. In the CI, the tests also run in WASM environment.
+
+## Contributing
+
+Open issues and pull requests at [github.com/mierenhoop/picomemo](https://github.com/mierenhoop/picomemo).
+
+Alternatively you can send an email or XMPP message to the
+addresses listed at [mnhp.nl/contact](https://mnhp.nl/contact),
+optionally with a git patch.
 
 ## License
 
