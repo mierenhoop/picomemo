@@ -20,7 +20,7 @@
       <xmpp:SupportedXep>
         <xmpp:xep rdf:resource='https://xmpp.org/extensions/xep-0384.html'/>
         <xmpp:status>partial</xmpp:status>
-        <xmpp:version>0.9.0</xmpp:version>
+        <xmpp:version>0.9.1</xmpp:version>
         <xmpp:note xml:lang='en'>Storage and XML (de)serialization should be handled by client.</xmpp:note>
       </xmpp:SupportedXep>
     </implements>
