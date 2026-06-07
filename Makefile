@@ -47,7 +47,7 @@ OMEMOSRCS:=c25519.c hacl.c omemo.c
 all: $(GENERATED) lib tags
 
 .PHONY: lib
-lib: o/libpicomemo.so.$V
+lib: o/libpicomemo.so.$V o/libpicomemo.a
 
 o:
 	mkdir -p o
@@ -55,11 +55,36 @@ o:
 SO_BUILD=$(CC) -shared -o $@ $^ $(CFLAGS) $(OMEMOCFLAGS) $(LDFLAGS) \
 		 $(LIBS) -fPIC -fvisibility=hidden
 
+A_BUILD=$(AR) -rcs $@ $^
+
+A_COMPILE=$(CC) -c -o $@ $^ $(CFLAGS) $(OMEMOCFLAGS)
+
 EXPORTDEF:="__attribute__((visibility(\"default\")))"
 
 o/libpicomemo.so.$V: gen/omemo0.c gen/omemo2.c $(DRIVERS) | o
 	$(SO_BUILD) -DOMEMO0_EXPORT=$(EXPORTDEF) -DOMEMO2_EXPORT=$(EXPORTDEF) \
 		-Wl,-soname,libpicomemo.so.$(SO_VERSION)
+
+o/libpicomemo.a: o/omemo0.o o/omemo2.o $(addprefix o/,$(DRIVERS:.c=.o)) | o
+	$(A_BUILD)
+
+o/c25519.o: c25519.c
+	$(A_COMPILE)
+
+o/hacl.o: hacl.c
+	$(A_COMPILE)
+
+o/mbedtls.o: mbedtls.c
+	$(A_COMPILE)
+
+o/omemo0.o: gen/omemo0.c
+	$(A_COMPILE) -DOMEMO0_EXPORT=$(EXPORTDEF)
+
+o/omemo2.o: gen/omemo2.c
+	$(A_COMPILE) -DOMEMO2_EXPORT=$(EXPORTDEF)
+
+o/openssl.o: openssl.c
+	$(A_COMPILE)
 
 $(GENERATED) &: omemo.c omemo.h gen/split.lua
 	lua gen/split.lua
