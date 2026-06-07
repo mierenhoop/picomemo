@@ -11,10 +11,17 @@
 # useful when you don't have mbedtls installed.
 # - Before that you have to $ make mbedtls && make -C mbedtls lib
 #
+# CTAGS can be either ctags (https://ctags.io/) or ctags-exuberant
+# (https://ctags.sourceforge.net/)
+#
 ###
 
 V:=1.2.0
 SO_VERSION:=1
+
+ifndef CTAGS
+CTAGS:=ctags-exuberant
+endif
 
 ifndef DRIVERS
 DRIVERS:=hacl.c mbedtls.c
@@ -105,7 +112,7 @@ mbedtls: mbedtls.tar.bz2
 
 .PHONY: tags
 tags:
-	@ctags-exuberant --c-kinds=+p -R --exclude=o --exclude=test/bot-venv
+	$(CTAGS) --c-kinds=+p -R --exclude=o --exclude=test/bot-venv
 
 .PHONY: clean
 clean:
