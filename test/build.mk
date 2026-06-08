@@ -5,21 +5,21 @@ all: test-omemo test-omemo2
 o/test-xmpp: test/xmpp.c example/yxml.c example/xmpp.c test/cacert.inc
 	$(CC) -o $@ test/xmpp.c example/yxml.c $(TESTCFLAGS) -Iexample -lmbedtls -lmbedcrypto -lmbedx509
 
-TESTOMEMO_DEPS=test/omemo.c omemo.c $(DRIVERS)
-TESTOMEMO_BUILD=$(CC) -o $@ $(filter-out omemo.c, $(TESTOMEMO_DEPS)) \
+TESTOMEMO_DEPS=test/omemo.c omemo.c $(DRIVEROBJS)
+TESTOMEMO_BUILD=$(CC) -o $@ test/omemo.c $(DRIVEROBJS) \
 				$(TESTCFLAGS) $(OMEMOCFLAGS) $(LIBS)
 
-o/test-omemo: $(TESTOMEMO_DEPS) o/store.inc o/msg.bin
+o/test-omemo: test/omemo.c omemo.c $(DRIVEROBJS) o/store.inc o/msg.bin
 	$(TESTOMEMO_BUILD)
 
-o/test-omemo2: $(TESTOMEMO_DEPS) o/store2.inc o/msg2.bin
+o/test-omemo2: test/omemo.c omemo.c $(DRIVEROBJS) o/store2.inc o/msg2.bin
 	$(TESTOMEMO_BUILD) -DOMEMO2
 
-o/generate: test/generate.c omemo.c $(DRIVERS) | o
-	$(CC) -o $@ $^ $(TESTCFLAGS) $(LIBS)
+o/generate: test/generate.c omemo.c $(DRIVEROBJS)
+	$(CC) -o $@ test/generate.c omemo.c $(DRIVEROBJS) $(TESTCFLAGS) $(LIBS)
 
-o/generate2: test/generate.c omemo.c $(DRIVERS) | o
-	$(CC) -o $@ $^ $(TESTCFLAGS) $(LIBS) -DOMEMO2
+o/generate2: test/generate.c omemo.c $(DRIVEROBJS)
+	$(CC) -o $@ test/generate.c omemo.c $(DRIVEROBJS) $(TESTCFLAGS) $(LIBS) -DOMEMO2
 
 o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv/
 	PYTHONPATH=o ./test/bot-venv/bin/python test/initsession.py bundle
