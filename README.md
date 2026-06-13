@@ -64,7 +64,7 @@ For compiling the shared libraries:
 - POSIX commands
 
 For testing & development: docker-compose, Python, openssl,
-  rlwrap, socat, xxd, ctags-exuberant
+  rlwrap, socat, xxd, ctags-exuberant, valgrind
 
 ## Usage
 

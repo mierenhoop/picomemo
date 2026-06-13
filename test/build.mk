@@ -45,11 +45,11 @@ test-xmpp: o/test-xmpp
 
 .PHONY: test-omemo
 test-omemo: o/test-omemo
-	./o/test-omemo
+	$(TESTRUNTOOL) ./o/test-omemo
 
 .PHONY: test-omemo2
 test-omemo2: o/test-omemo2
-	./o/test-omemo2
+	$(TESTRUNTOOL) ./o/test-omemo2
 
 .PHONY: start-prosody
 start-prosody: test/localhost.crt
