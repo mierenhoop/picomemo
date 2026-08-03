@@ -1,11 +1,11 @@
 ### CONFIG ###
 #
 # Example configurations:
-# $ DRIVERS="hacl openssl" CFLAGS="-O3" LDFLAGS="-flto" make
-# $ DRIVERS="hacl mbedtls" MBED_VENDOR=mbedtls          make
+# $ DRIVERS="hacl.c openssl.c" CFLAGS="-O3" LDFLAGS="-flto" make
+# $ DRIVERS="hacl.c mbedtls.c" MBED_VENDOR=mbedtls          make
 #
-# For DRIVERS choose one of 'hacl' OR 'c25519',
-#             AND one of 'mbedtls' OR 'openssl'
+# For DRIVERS choose one of 'hacl.c' OR 'c25519.c',
+#             AND one of 'mbedtls.c' OR 'openssl.c'
 #
 # MBED_VENDOR=mbedtls will compile with an "in-tree" mbedtls,
 # useful when you don't have mbedtls installed.
@@ -16,22 +16,26 @@
 #
 ###
 
-V:=1.2.0
+V:=1.2.1
 SO_VERSION:=1
+
+PREFIX?=/usr/local
+LIBDIR?=lib
+INCDIR?=include
 
 ifndef CTAGS
 CTAGS:=ctags-exuberant
 endif
 
 ifndef DRIVERS
-DRIVERS:=hacl mbedtls
+DRIVERS:=hacl.c mbedtls.c
 endif
 
-DRIVEROBJS:=$(patsubst %,o/%.o,$(DRIVERS))
+DRIVEROBJS:=$(patsubst %.c,o/%.o,$(DRIVERS))
 
-OMEMOCFLAGS:=-I gen/include
+OMEMOCFLAGS:=-I gen
 
-ifneq ($(filter mbedtls,$(DRIVERS)),)
+ifneq ($(filter mbedtls.c,$(DRIVERS)),)
 ifdef MBED_VENDOR
 LIBS+=$(MBED_VENDOR)/library/libmbedcrypto.a
 OMEMOCFLAGS+=-I $(MBED_VENDOR)/include
@@ -40,7 +44,7 @@ LIBS+=-lmbedcrypto
 endif
 endif
 
-ifneq ($(filter openssl,$(DRIVERS)),)
+ifneq ($(filter openssl.c,$(DRIVERS)),)
 LIBS+=-lssl -lcrypto
 endif
 
@@ -48,9 +52,9 @@ CFLAGS?=-O2 -g
 CFLAGS+=-Wall -Wno-pointer-sign -Wno-unused-function -I. -MMD -MP
 
 GENERATED:=gen/omemo0.c \
+           gen/omemo0.h \
            gen/omemo2.c \
-           gen/include/omemo0.h \
-           gen/include/omemo2.h
+           gen/omemo2.h
 
 OMEMOSRCS:=c25519.c hacl.c omemo.c
 
@@ -59,6 +63,24 @@ all: $(GENERATED) lib tags
 
 .PHONY: lib
 lib: o/libpicomemo.so.$V o/libpicomemo.a
+
+.PHONY: install
+install: o/libpicomemo.so.$V o/libpicomemo.a
+	install -d $(PREFIX)/$(LIBDIR) $(PREFIX)/$(INCDIR)
+	install -m 644 gen/omemo0.h gen/omemo2.h $(PREFIX)/$(INCDIR)
+	install -m 644 o/libpicomemo.a $(PREFIX)/$(LIBDIR)
+	install -m 755 o/libpicomemo.so.$V $(PREFIX)/$(LIBDIR)
+	ln -sf libpicomemo.so.$V $(PREFIX)/$(LIBDIR)/libpicomemo.so.$(SO_VERSION)
+	ln -sf libpicomemo.so.$(SO_VERSION) $(PREFIX)/$(LIBDIR)/libpicomemo.so
+
+.PHONY: uninstall
+uninstall:
+	rm -f $(PREFIX)/$(LIBDIR)/libpicomemo.a \
+	      $(PREFIX)/$(LIBDIR)/libpicomemo.so \
+	      $(PREFIX)/$(LIBDIR)/libpicomemo.so.$(SO_VERSION) \
+	      $(PREFIX)/$(LIBDIR)/libpicomemo.so.$V \
+	      $(PREFIX)/$(INCDIR)/omemo0.h \
+	      $(PREFIX)/$(INCDIR)/omemo2.h
 
 o:
 	mkdir -p o

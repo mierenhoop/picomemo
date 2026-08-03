@@ -21,10 +21,10 @@ o/generate: test/generate.c omemo.c $(DRIVEROBJS)
 o/generate2: test/generate.c omemo.c $(DRIVEROBJS)
 	$(CC) -o $@ test/generate.c omemo.c $(DRIVEROBJS) $(TESTCFLAGS) $(LIBS) -DOMEMO2
 
-o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv/
+o/msg.bin: test/initsession.py o/bundle.py | test/bot-venv
 	PYTHONPATH=o ./test/bot-venv/bin/python test/initsession.py bundle
 
-o/msg2.bin: test/initsession.py o/bundle2.py | test/bot-venv/
+o/msg2.bin: test/initsession.py o/bundle2.py | test/bot-venv
 	PYTHONPATH=o ./test/bot-venv/bin/python test/initsession.py bundle2
 
 test/localhost.crt:
@@ -68,11 +68,11 @@ reset-accounts:
 	   prosodyctl register admin localhost adminpass && \
 	   prosodyctl register user  localhost userpass'
 
-test/bot-venv/:
-	python -m venv test/bot-venv/
+test/bot-venv:
+	python -m venv test/bot-venv
 	./test/bot-venv/bin/pip install slixmpp==1.8.5
 	./test/bot-venv/bin/pip install slixmpp-omemo==1.0.0
 
-start-omemo-bot: | test/bot-venv/
+start-omemo-bot: | test/bot-venv
 	./test/bot-venv/bin/python test/bot-omemo.py
 
