@@ -16,6 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/kdf.h>
@@ -133,4 +134,8 @@ b:return r;
 
 int omemoDriverCompare(const void *a, const void *b, size_t n) {
   return CRYPTO_memcmp(a, b, n);
+}
+
+void omemoDriverWipe(void *p, size_t n) {
+  OPENSSL_cleanse(p, n);
 }

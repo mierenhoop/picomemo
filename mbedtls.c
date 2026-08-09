@@ -20,6 +20,7 @@
 #include <mbedtls/constant_time.h>
 #include <mbedtls/gcm.h>
 #include <mbedtls/hkdf.h>
+#include <mbedtls/platform_util.h>
 
 #include "omemo.h"
 #include "driver.h"
@@ -30,7 +31,6 @@ int omemoDriverHmac(const omemoKey k, const uint8_t *in, size_t ilen, uint8_t ou
   TRY(mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), k, 32, in, ilen, out));
   return 0;
 }
-
 
 int omemoDriverAesEncrypt(omemoKey k, size_t n, uint8_t iv[static 16], const uint8_t *s, uint8_t *d) {
   mbedtls_aes_context aes;
@@ -78,4 +78,8 @@ int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, co
 
 int omemoDriverCompare(const void *a, const void *b, size_t n) {
   return mbedtls_ct_memcmp(a, b, n);
+}
+
+void omemoDriverWipe(void *p, size_t n) {
+  mbedtls_platform_zeroize(p, n);
 }
