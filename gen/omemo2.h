@@ -107,23 +107,72 @@ struct omemo2Session {
   uint32_t usedpk_id, usedspk_id;
 };
 
+/**
+ * Callback which is called in omemo2DecryptKey() to load skipped message keys.
+ *
+ * This function will be called every time omemo2DecryptKey() is called. Most
+ * messages are in order, so there will be no key for it yet. This means `return
+ * 1` will be the "happy path".
+ *
+ * @param sk has fields `nr` and `dh` filled in, which should be used to look up
+ * `mk` in your persistent skipped message keys map, and should be written in
+ * field `mk`
+ *
+ * @returns 0 when found, 1 when missing, or a negative error value
+ */
 typedef int (*omemo2LoadMessageKeyCallback)(struct omemo2Session *,
                                            struct omemo2MessageKey *sk);
 
+/**
+ * Callback which is called in omemo2DecryptKey() to store skipped message keys
+ * caused by decrypting an out-of-order message.
+ *
+ * Must read: https://xmpp.org/extensions/attic/xep-0384-0.9.1.html on
+ * "MAX_SKIP" and "deletion policy for skipped message keys".
+ *
+ * @param sk contains the fields `nr`, `dh`, and `mk`, which should be stored in
+ * a persistent map indexed from (nr, dh) -> mk, to be later retrieved by
+ * omemo2LoadMessageKeyCallback
+ * @param n is the number of upcoming calls to this callback for the remaining
+ * keys. IMPORTANT: if n > MAX_SKIP (OMEMO spec recommends 1000), you should not
+ * store the key and instead return an error, otherwise a DoS attack is
+ * possible.
+ */
 typedef int (*omemo2StoreMessageKeyCallback)(
     struct omemo2Session *,
-    const struct omemo2MessageKey *,
+    const struct omemo2MessageKey *sk,
     uint64_t n);
 
+/**
+ * Callback for cryptographically secure random number generation.
+ *
+ * This function is already implemented for Linux. On other systems you will
+ * have to implement it yourself otherwise most functions in this library will
+ * will fail by returning OMEMO2_ERANDOM.
+ *
+ * @param p points to the buffer that should be filled with random data
+ * @param n is the amount of random bytes that `p` should be filled with
+ *
+ * @returns 0 on success or a non-zero (error) value
+ */
 typedef int (*omemo2RandomCallback)(void *p, size_t n);
 
+/**
+ * Deprecated: use omemo2SetCallbacks() instead.
+ */
 int omemo2LoadMessageKey(struct omemo2Session *s,
                         struct omemo2MessageKey *sk);
 
+/**
+ * Deprecated: use omemo2SetCallbacks() instead.
+ */
 int omemo2StoreMessageKey(struct omemo2Session *s,
                          const struct omemo2MessageKey *sk,
                          uint64_t n);
 
+/**
+ * Deprecated: use omemo2SetCallbacks() instead.
+ */
 int omemo2Random(void *p, size_t n);
 
 /**
@@ -230,8 +279,7 @@ OMEMO2_EXPORT int omemo2EncryptKey(struct omemo2Session *session,
  * all other messages. Remove by iterating over store->prekeys and
  * zeroing the omemo2PreKey structure where id == store->usedpk_id.
  *
- * If session->state.nr >= 53 you should send an empty message back to
- * advance the ratchet.
+ * Always call omemo2Heartbeat() after successful decryption.
  *
  * @returns 0 or OMEMO2_E*
  */

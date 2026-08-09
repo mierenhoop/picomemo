@@ -146,7 +146,7 @@ static const uint8_t *ParseVarInt(const uint8_t *s, const uint8_t *e,
   int i = 0;
   *v = 0;
   do {
-    if (s >= e)
+    if (s >= e || i > 31)
       return NULL;
     *v |= (*s & 0x7f) << i;
     i += 7;
@@ -751,13 +751,6 @@ static int DecryptKeyImpl(struct omemo2Session *session,
   const uint8_t *headerdh = GetRawKey(fields[PbMsg_dh_pub].p);
 
   bool shouldstep = !!memcmp(session->state.dhr, headerdh, 32);
-
-  // We first check for maxskip, if that does not pass we should not
-  // process the message. If it does pass, we know the total capacity of
-  // the array is large enough because c >= maxskip. Then we check if
-  // the new keys fit in the remaining space. If that is not the case we
-  // return and let the user either remove the old message keys or
-  // ignore the message.
 
   omemo2Key mk;
   struct omemo2MessageKey mkey = {0};

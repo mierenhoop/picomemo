@@ -149,7 +149,7 @@ static const uint8_t *ParseVarInt(const uint8_t *s, const uint8_t *e,
   int i = 0;
   *v = 0;
   do {
-    if (s >= e)
+    if (s >= e || i > 31)
       return NULL;
     *v |= (*s & 0x7f) << i;
     i += 7;
@@ -764,13 +764,6 @@ static int DecryptKeyImpl(struct omemo0Session *session,
 
   bool shouldstep = !!memcmp(session->state.dhr, headerdh, 32);
 
-  // We first check for maxskip, if that does not pass we should not
-  // process the message. If it does pass, we know the total capacity of
-  // the array is large enough because c >= maxskip. Then we check if
-  // the new keys fit in the remaining space. If that is not the case we
-  // return and let the user either remove the old message keys or
-  // ignore the message.
-
   omemo0Key mk;
   struct omemo0MessageKey mkey = {0};
   memcpy(mkey.dh, headerdh, 32);
@@ -918,11 +911,10 @@ int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      const uint8_t *s, size_t n) {
   if (!d || !key || !iv || !s)
     return OMEMO0_EPARAM;
-  int r = 0;
   if (keyn < 32)
     return OMEMO0_ECORRUPT;
   TRY(omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s));
-  return r ? OMEMO0_ECRYPTO : 0;
+  return 0;
 }
 
 
