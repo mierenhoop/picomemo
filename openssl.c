@@ -97,12 +97,12 @@ b:EVP_KDF_free(kdf);
 c:return r;
 }
 
-int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], uint8_t tag[static 16], const uint8_t *s) {
+int omemoDriverGcmEncrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t *iv, size_t ivn, uint8_t tag[static 16], const uint8_t *s) {
   int len, r = OMEMO_ECRYPTO;
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   if (!ctx) goto b;
   TRY(EVP_EncryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL));
-  TRY(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL));
+  TRY(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, ivn, NULL));
   TRY(EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv));
   TRY(EVP_EncryptUpdate(ctx, d, &len, s, n));
   TRY(len == n);
@@ -114,12 +114,12 @@ a:EVP_CIPHER_CTX_free(ctx);
 b:return r;
 }
 
-int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t iv[static 12], const uint8_t *tag, size_t tagn, const uint8_t *s) {
+int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, const uint8_t *iv, size_t ivn, const uint8_t *tag, size_t tagn, const uint8_t *s) {
   int len, r = OMEMO_ECRYPTO;
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   if (!ctx) goto b;
   TRY(EVP_DecryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL));
-  TRY(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL));
+  TRY(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, ivn, NULL));
   TRY(EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv));
   TRY(EVP_DecryptUpdate(ctx, NULL, &len, "", 0));
   TRY(EVP_DecryptUpdate(ctx, d, &len, s, n));

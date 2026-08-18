@@ -913,7 +913,18 @@ int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
     return OMEMO0_EPARAM;
   if (keyn < 32)
     return OMEMO0_ECORRUPT;
-  TRY(omemoDriverGcmDecrypt(d, key, n, iv, key+16, keyn-16, s));
+  TRY(omemoDriverGcmDecrypt(d, key, n, iv, 12, key+16, keyn-16, s));
+  return 0;
+}
+
+int omemo0DecryptMessage16(uint8_t *d, const uint8_t *key,
+                                     size_t keyn, const uint8_t iv[16],
+                                     const uint8_t *s, size_t n) {
+  if (!d || !key || !iv || !s)
+    return OMEMO0_EPARAM;
+  if (keyn < 32)
+    return OMEMO0_ECORRUPT;
+  TRY(omemoDriverGcmDecrypt(d, key, n, iv, 16, key+16, keyn-16, s));
   return 0;
 }
 
@@ -926,7 +937,18 @@ int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
   int r = 0;
   if ((r = omemo0Random(key, 16)) || (r = omemo0Random(iv, 12)))
     return r;
-  return omemoDriverGcmEncrypt(d, key, n, iv, key + 16, s);
+  return omemoDriverGcmEncrypt(d, key, n, iv, 12, key + 16, s);
+}
+
+int omemo0EncryptMessage16(uint8_t *d, uint8_t key[32],
+                                     uint8_t iv[16], const uint8_t *s,
+                                     size_t n) {
+  if (!d || !key || !iv || !s)
+    return OMEMO0_EPARAM;
+  int r = 0;
+  if ((r = omemo0Random(key, 16)) || (r = omemo0Random(iv, 16)))
+    return r;
+  return omemoDriverGcmEncrypt(d, key, n, iv, 16, key + 16, s);
 }
 
 /************************** SERIALIZATION ****************************/

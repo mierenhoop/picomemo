@@ -313,10 +313,26 @@ OMEMO0_EXPORT int omemo0Heartbeat(struct omemo0Session *session,
  * @param key (out) will contain the encryption key
  * @param n is the size of the buffer in d and s
  *
+ * @see omemo0EncryptMessage16() for the 16-byte IV variant
+ *
  * @returns 0 or OMEMO0_E*
  */
 OMEMO0_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
+                                     size_t n);
+
+/**
+ * Encrypt message which will be stored in the <payload> element.
+ *
+ * @param key (out) will contain the encryption key
+ * @param n is the size of the buffer in d and s
+ *
+ * @see omemo0EncryptMessage() for the 12-byte IV variant
+ *
+ * @returns 0 or OMEMO0_E*
+ */
+OMEMO0_EXPORT int omemo0EncryptMessage16(uint8_t *d, uint8_t key[32],
+                                     uint8_t iv[16], const uint8_t *s,
                                      size_t n);
 
 
@@ -328,10 +344,28 @@ OMEMO0_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
  * larger than 16 bytes
  * @param n is the size of the buffer in d and s
  *
+ * @see omemo0DecryptMessage16() for the 16-byte IV variant
+ *
  * @returns 0 or OMEMO0_E*
  */
 OMEMO0_EXPORT int omemo0DecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
+                                     const uint8_t *s, size_t n);
+
+/**
+ * Decrypt message taken from the <payload> element.
+ *
+ * @param key is the decrypted key of the omemo0KeyMessage
+ * @param keyn is the size of key, some clients might make the tag
+ * larger than 16 bytes
+ * @param n is the size of the buffer in d and s
+ *
+ * @see omemo0DecryptMessage() for the 12-byte IV variant
+ *
+ * @returns 0 or OMEMO0_E*
+ */
+OMEMO0_EXPORT int omemo0DecryptMessage16(uint8_t *d, const uint8_t *key,
+                                     size_t keyn, const uint8_t iv[16],
                                      const uint8_t *s, size_t n);
 
 #endif

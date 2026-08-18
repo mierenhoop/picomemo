@@ -343,10 +343,26 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
  * @param key (out) will contain the encryption key
  * @param n is the size of the buffer in d and s
  *
+ * @see omemoEncryptMessage16() for the 16-byte IV variant
+ *
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
+                                     size_t n);
+
+/**
+ * Encrypt message which will be stored in the <payload> element.
+ *
+ * @param key (out) will contain the encryption key
+ * @param n is the size of the buffer in d and s
+ *
+ * @see omemoEncryptMessage() for the 12-byte IV variant
+ *
+ * @returns 0 or OMEMO_E*
+ */
+OMEMO_EXPORT int omemoEncryptMessage16(uint8_t *d, uint8_t key[32],
+                                     uint8_t iv[16], const uint8_t *s,
                                      size_t n);
 #endif
 
@@ -372,10 +388,28 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
  * larger than 16 bytes
  * @param n is the size of the buffer in d and s
  *
+ * @see omemoDecryptMessage16() for the 16-byte IV variant
+ *
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
+                                     const uint8_t *s, size_t n);
+
+/**
+ * Decrypt message taken from the <payload> element.
+ *
+ * @param key is the decrypted key of the omemoKeyMessage
+ * @param keyn is the size of key, some clients might make the tag
+ * larger than 16 bytes
+ * @param n is the size of the buffer in d and s
+ *
+ * @see omemoDecryptMessage() for the 12-byte IV variant
+ *
+ * @returns 0 or OMEMO_E*
+ */
+OMEMO_EXPORT int omemoDecryptMessage16(uint8_t *d, const uint8_t *key,
+                                     size_t keyn, const uint8_t iv[16],
                                      const uint8_t *s, size_t n);
 #endif
 
