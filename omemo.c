@@ -1110,17 +1110,6 @@ int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
     return r;
   return omemoDriverGcmEncrypt(d, key, n, iv, 12, key + 16, s);
 }
-
-int omemoEncryptMessage16(uint8_t *d, uint8_t key[32],
-                                     uint8_t iv[16], const uint8_t *s,
-                                     size_t n) {
-  if (!d || !key || !iv || !s)
-    return OMEMO_EPARAM;
-  int r = 0;
-  if ((r = omemoRandom(key, 16)) || (r = omemoRandom(iv, 16)))
-    return r;
-  return omemoDriverGcmEncrypt(d, key, n, iv, 16, key + 16, s);
-}
 #endif
 
 /************************** SERIALIZATION ****************************/

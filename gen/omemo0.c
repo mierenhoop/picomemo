@@ -940,17 +940,6 @@ int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
   return omemoDriverGcmEncrypt(d, key, n, iv, 12, key + 16, s);
 }
 
-int omemo0EncryptMessage16(uint8_t *d, uint8_t key[32],
-                                     uint8_t iv[16], const uint8_t *s,
-                                     size_t n) {
-  if (!d || !key || !iv || !s)
-    return OMEMO0_EPARAM;
-  int r = 0;
-  if ((r = omemo0Random(key, 16)) || (r = omemo0Random(iv, 16)))
-    return r;
-  return omemoDriverGcmEncrypt(d, key, n, iv, 16, key + 16, s);
-}
-
 /************************** SERIALIZATION ****************************/
 
 size_t omemo0GetSerializedStoreSize(const struct omemo0Store *store) {

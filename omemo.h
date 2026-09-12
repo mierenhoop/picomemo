@@ -350,20 +350,6 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
                                      uint8_t iv[12], const uint8_t *s,
                                      size_t n);
-
-/**
- * Encrypt message which will be stored in the <payload> element.
- *
- * @param key (out) will contain the encryption key
- * @param n is the size of the buffer in d and s
- *
- * @see omemoEncryptMessage() for the 12-byte IV variant
- *
- * @returns 0 or OMEMO_E*
- */
-OMEMO_EXPORT int omemoEncryptMessage16(uint8_t *d, uint8_t key[32],
-                                     uint8_t iv[16], const uint8_t *s,
-                                     size_t n);
 #endif
 
 #ifdef OMEMO2

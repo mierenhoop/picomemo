@@ -221,6 +221,18 @@ static void TestSignature() {
 #endif
 }
 
+#ifndef OMEMO2
+int EncryptMessage16(uint8_t *d, uint8_t key[32], uint8_t iv[16],
+                           const uint8_t *s, size_t n) {
+  if (!d || !key || !iv || !s)
+    return OMEMO_EPARAM;
+  int r = 0;
+  if ((r = omemoRandom(key, 16)) || (r = omemoRandom(iv, 16)))
+    return r;
+  return omemoDriverGcmEncrypt(d, key, n, iv, 16, key + 16, s);
+}
+#endif
+
 static void TestEncryption() {
   const uint8_t *msg = "Hello there!";
   size_t n = strlen(msg);
@@ -231,13 +243,18 @@ static void TestEncryption() {
   assert(!omemoEncryptMessage(encrypted, payload, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
   assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(payload), encrypted, n+omemoGetMessagePadSize(n)));
+  assert(!memcmp(msg, decrypted, n));
 #else
-  uint8_t iv[12];
+  uint8_t iv[16];
   assert(!omemoEncryptMessage(encrypted, payload, iv, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
   assert(!omemoDecryptMessage(decrypted, payload, sizeof(payload), iv, encrypted, n));
-#endif
   assert(!memcmp(msg, decrypted, n));
+  assert(!EncryptMessage16(encrypted, payload, iv, decrypted, n));
+  memset(decrypted, 0, sizeof(decrypted));
+  assert(!omemoDecryptMessage16(decrypted, payload, sizeof(payload), iv, encrypted, n));
+  assert(!memcmp(msg, decrypted, n));
+#endif
 
 #ifdef OMEMO2
   CopyHex(payload, "6820575d498eff7babf1d1c3e23358a515e439ac9b649c5a6b631256a7851f3f962a8aeecb68c146333aa690ff516f2f");
