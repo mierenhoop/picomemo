@@ -264,6 +264,7 @@ static void TestEncryption() {
 #define MKSKIPPEDN 10
 struct omemoMessageKey mkskipped[MKSKIPPEDN];
 int mkskippedi;
+uint64_t expectnskip;
 
 static void RemoveSkippedKey(int i) {
   size_t n = MKSKIPPEDN - i - 1;
@@ -287,6 +288,11 @@ int LoadMessageKey(struct omemoSession *s, struct omemoMessageKey *k) {
 int StoreMessageKey(struct omemoSession *s, const struct omemoMessageKey *k, uint64_t n) {
   if (mkskippedi >= MKSKIPPEDN)
     return OMEMO_EUSER;
+  if (n != expectnskip) {
+    printf("StoreMessageKey: expected n to be %ld but got %ld\n", expectnskip, n);
+    return OMEMO_EUSER;
+  }
+  expectnskip--;
   memcpy(&mkskipped[mkskippedi++], k, sizeof(*k));
   return 0;
 }
@@ -301,6 +307,26 @@ static void Init(struct omemoSession *sessiona, struct omemoStore *storea, struc
   assert(omemoInitiateSession(sessiona, storea, storeb->cursignedprekey.sig, spk, ik, pk, storeb->cursignedprekey.id, storeb->prekeys[pk_id-1].id) == 0);
 }
 
+//                  a                         b
+//                  |--- 0: N=0 PN=0 -------->| step
+//             step |<-- 1: N=0 PN=0 ---------|
+//                  |<-- 2: N=1 PN=0 ---------|
+//                  |    3: N=2 PN=0 ---------| delayed msg
+//           skip 3 |<-- 4: N=3 PN=0 ---------|
+//           load 3 |                         |
+//                  |    5: N=4 PN=0 ---------| delayed msg
+//                  |    6: N=5 PN=0 ---------| delayed msg
+//      delayed msg |--- 7: N=0 PN=1          |
+//                  |--- 8: N=1 PN=1 -------->| step
+//                  |                         | skip 7
+//                  |                         | load 7
+//                  |    9: N=0 PN=6 ---------| delayed msg
+//                  |   10: N=1 PN=6 ---------| delayed msg
+//                  |   11: N=2 PN=6 ---------| delayed msg
+//         skip 5,6 |<--12: N=3 PN=6 ---------|
+//             step |                         |
+//     skip 9,10,11 |                         |
+// load 10,5,11,6,9 |                         |
 static void TestSession() {
   struct {
     uint8_t payload[OMEMO_KEYSIZE];
@@ -329,10 +355,43 @@ static void TestSession() {
   Send(b, 4);
 
   assert(mkskippedi == 0);
+  expectnskip = 1;
   Recv(a, 4, false);
+  assert(expectnskip == 0);
 
   assert(mkskippedi == 1);
   Recv(a, 3, false);
+  assert(mkskippedi == 0);
+
+  Send(b, 5);
+  Send(b, 6);
+
+  Send(a, 7);
+  Send(a, 8);
+
+  expectnskip = 1;
+  Recv(b, 8, false);
+  assert(expectnskip == 0);
+
+  assert(mkskippedi == 1);
+  Recv(b, 7, false);
+  assert(mkskippedi == 0);
+
+  Send(b, 9);
+  Send(b, 10);
+  Send(b, 11);
+  Send(b, 12);
+
+  expectnskip = 5;
+  Recv(a, 12, false);
+  assert(expectnskip == 0);
+
+  assert(mkskippedi == 5);
+  Recv(a, 10, false);
+  Recv(a, 5, false);
+  Recv(a, 11, false);
+  Recv(a, 6, false);
+  Recv(a, 9, false);
   assert(mkskippedi == 0);
 
   memset(mkskipped, 0, sizeof(mkskipped));

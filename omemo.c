@@ -882,7 +882,7 @@ static int DecryptKeyImpl(struct omemoSession *session,
             : GetAmountSkipped(session->state.nr, headern);
     if (shouldstep) {
       TRY(SkipMessageKeys(session, headerpn, nskips));
-      nskips -= headern;
+      nskips = headern;
       TRY(DHRatchet(&session->state, headerdh));
     }
     TRY(SkipMessageKeys(session, headern, nskips));
