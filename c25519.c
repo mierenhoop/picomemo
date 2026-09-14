@@ -1,14 +1,5 @@
-// https://www.dlbeer.co.nz/downloads/c25519-2017-10-05.zip
-// MD5 sum: 2f19396f8becb44fe1cd5e40111e3ffb c25519-2017-10-05.zip
-
-/* Curve25519 (Montgomery form)
- * Daniel Beer <dlbeer@gmail.com>, 18 Apr 2014
- *
- * This file is in the public domain.
- */
-
-// Start of headers
-
+// Amalgamation of a stripped down c25519 by Daniel Beer. Generated with
+// `make amalg-c25519`.
 /* Arithmetic mod p = 2^255-19
  * Daniel Beer <dlbeer@gmail.com>, 8 Jan 2014
  *
@@ -277,12 +268,6 @@ void edsign_sign(uint8_t *signature, const uint8_t *pub,
 		 const uint8_t *secret,
 		 const uint8_t *message, size_t len);
 
-void edsign_sign_modified(uint8_t *signature, const uint8_t *pub,
-		 const uint8_t *secret,
-		 const uint8_t *message, size_t len);
-
-void edsign_sm_pack(uint8_t *r, const uint8_t *k);
-
 /* Verify a message signature. Returns non-zero if ok. */
 uint8_t edsign_verify(const uint8_t *signature, const uint8_t *pub,
 		      const uint8_t *message, size_t len);
@@ -386,8 +371,6 @@ static inline int morph25519_eparity(const uint8_t *edwards_x)
 uint8_t morph25519_m2e(uint8_t *ex, uint8_t *ey,
 		       const uint8_t *mx, int parity);
 
-void morph25519_mx2ey(uint8_t *ey, const uint8_t *mx);
-
 #endif
 /* SHA512
  * Daniel Beer <dlbeer@gmail.com>, 22 Apr 2014
@@ -441,8 +424,13 @@ void sha512_get(const struct sha512_state *s, uint8_t *hash,
 		unsigned int offset, unsigned int len);
 
 #endif
+/* Curve25519 (Montgomery form)
+ * Daniel Beer <dlbeer@gmail.com>, 18 Apr 2014
+ *
+ * This file is in the public domain.
+ */
 
-// Start of implementations
+
 
 const uint8_t c25519_base_x[F25519_SIZE] = {9};
 
@@ -929,7 +917,7 @@ static void pp(uint8_t *packed, const struct ed25519_pt *p)
 	ed25519_pack(packed, x, y);
 }
 
-void edsign_sm_pack(uint8_t *r, const uint8_t *k)
+static void sm_pack(uint8_t *r, const uint8_t *k)
 {
 	struct ed25519_pt p;
 
@@ -942,7 +930,7 @@ void edsign_sec_to_pub(uint8_t *pub, uint8_t *prv, const uint8_t *secret)
 	uint8_t expanded[EXPANDED_SIZE];
 
 	expand_key(expanded, secret);
-	edsign_sm_pack(pub, expanded);
+	sm_pack(pub, expanded);
 	memcpy(prv, expanded, 32);
 }
 
@@ -1009,7 +997,7 @@ void edsign_sign(uint8_t *signature, const uint8_t *pub,
 
 	/* Generate k and R = kB */
 	generate_k(k, expanded + 32, message, len);
-	edsign_sm_pack(signature, k);
+	sm_pack(signature, k);
 
 	/* Compute z = H(R, A, M) */
 	hash_message(z, signature, pub, message, len);
@@ -1037,7 +1025,7 @@ uint8_t edsign_verify(const uint8_t *signature, const uint8_t *pub,
 	hash_message(z, signature, pub, message, len);
 
 	/* sB = (ze + k)B = ... */
-	edsign_sm_pack(lhs, signature + 32);
+	sm_pack(lhs, signature + 32);
 
 	/* ... = zA + R */
 	ok &= upp(&p, pub);
@@ -1904,7 +1892,7 @@ void sha512_get(const struct sha512_state *s, uint8_t *hash,
 	}
 }
 
-// OMEMO additions
+// OMEMO Additions
 
 #include "omemo.h"
 #include "driver.h"
@@ -1928,7 +1916,7 @@ void omemoDriverEdSignMod(omemoCurveSignature signature, omemoKey pub, omemoKey 
 		memcpy(block, signature, 64);
 		hash_with_prefix(k, block, 64, message, len + 64);
 	}
-	edsign_sm_pack(signature, k);
+	sm_pack(signature, k);
 
 	/* Compute z = H(R, A, M) */
 	hash_message(z, signature, pub, message, len);
@@ -1954,7 +1942,7 @@ void omemoDriverEdPubToCvPub(omemoKey cv, omemoKey ed) {
 }
 
 void omemoDriverCvPrvToEdPub(omemoKey pub, omemoKey prv) {
-  edsign_sm_pack(pub, prv);
+  sm_pack(pub, prv);
 }
 
 void omemoDriverCvPubToEdPub(omemoKey ed, omemoKey cv) {

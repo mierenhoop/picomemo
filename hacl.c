@@ -1,3 +1,5 @@
+// Amalgamation of a stripped down hacl*. Generated with
+// `make amalg-hacl`.
 #ifdef __x86_64__
 #define HACL_CAN_COMPILE_INTRINSICS 1
 #endif
@@ -5,9 +7,6 @@
 
 #define KRML_HOST_PRINTF(...) (void)0
 #define KRML_HOST_EPRINTF(...) (void)0
-
-// Start of amalgamation
-
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
    Licensed under the Apache 2.0 and MIT Licenses. */
 
@@ -43,8 +42,8 @@ typedef int32_t Prims_pos, Prims_nat, Prims_nonzero, Prims_int,
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
    Licensed under the Apache 2.0 and MIT Licenses. */
 
-#ifndef __KRML_TARGET_H
-#define __KRML_TARGET_H
+#ifndef KRML_HEADER_TARGET_H
+#define KRML_HEADER_TARGET_H
 
 #include <assert.h>
 #include <inttypes.h>
@@ -53,6 +52,9 @@ typedef int32_t Prims_pos, Prims_nat, Prims_nonzero, Prims_int,
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+typedef float float32_t;
+typedef double float64_t;
 
 /* Since KaRaMeL emits the inline keyword unconditionally, we follow the
  * guidelines at https://gcc.gnu.org/onlinedocs/gcc/Inline.html and make this
@@ -467,7 +469,7 @@ inline static int32_t krml_time(void) {
 #else
 #  define KRML_MAYBE_FOR16(i, z, n, k, x) KRML_ACTUAL_FOR(i, z, n, k, x)
 #endif
-#endif
+#endif /* KRML_HEADER_TARGET_H */
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
    Licensed under the Apache 2.0 and MIT Licenses. */
 
@@ -560,7 +562,7 @@ typedef FStar_UInt128_uint128 FStar_UInt128_t, uint128_t;
 
 /* Avoid a circular loop: if this header is included via FStar_UInt8_16_32_64,
  * then don't bring the uint128 definitions into scope. */
-#ifndef __FStar_UInt_8_16_32_64_H
+#ifndef FStar_UInt_8_16_32_64_H
 
 #if !defined(KRML_VERIFIED_UINT128) && defined(IS_MSVC64)
 #elif !defined(KRML_VERIFIED_UINT128) && defined(HAS_INT128)
@@ -571,8 +573,8 @@ typedef FStar_UInt128_uint128 FStar_UInt128_t, uint128_t;
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
    Licensed under the Apache 2.0 and MIT Licenses. */
 
-#ifndef __LOWSTAR_ENDIANNESS_H
-#define __LOWSTAR_ENDIANNESS_H
+#ifndef KRML_HEADER_LOWSTAR_ENDIANNESS_H
+#define KRML_HEADER_LOWSTAR_ENDIANNESS_H
 
 #include <string.h>
 #include <inttypes.h>
@@ -798,15 +800,15 @@ inline static void store64(uint8_t *b, uint64_t i) {
 #define load128_be0 load128_be
 #define store128_be0 store128_be
 
-#endif
+#endif /* KRML_HEADER_LOWSTAR_ENDIANNESS_H */
 /*
   Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
   Licensed under the Apache 2.0 and MIT Licenses.
 */
 
 
-#ifndef __FStar_UInt128_H
-#define __FStar_UInt128_H
+#ifndef FStar_UInt128_H
+#define FStar_UInt128_H
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -871,16 +873,16 @@ static inline FStar_UInt128_uint128 FStar_UInt128_mul32(uint64_t x, uint32_t y);
 static inline FStar_UInt128_uint128 FStar_UInt128_mul_wide(uint64_t x, uint64_t y);
 
 
-#define __FStar_UInt128_H_DEFINED
-#endif
+#define FStar_UInt128_H_DEFINED
+#endif /* FStar_UInt128_H */
 /*
   Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
   Licensed under the Apache 2.0 and MIT Licenses.
 */
 
 
-#ifndef __LowStar_Endianness_H
-#define __LowStar_Endianness_H
+#ifndef LowStar_Endianness_H
+#define LowStar_Endianness_H
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -894,16 +896,16 @@ static inline void store128_be(uint8_t *x0, FStar_UInt128_uint128 x1);
 static inline FStar_UInt128_uint128 load128_be(uint8_t *x0);
 
 
-#define __LowStar_Endianness_H_DEFINED
-#endif
+#define LowStar_Endianness_H_DEFINED
+#endif /* LowStar_Endianness_H */
 /*
   Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
   Licensed under the Apache 2.0 and MIT Licenses.
 */
 
 
-#ifndef __FStar_UInt_8_16_32_64_H
-#define __FStar_UInt_8_16_32_64_H
+#ifndef FStar_UInt_8_16_32_64_H
+#define FStar_UInt_8_16_32_64_H
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -923,6 +925,8 @@ extern uint64_t FStar_UInt64_uint_to_t(krml_checked_int_t x);
 extern uint64_t FStar_UInt64_zero;
 
 extern uint64_t FStar_UInt64_one;
+
+extern bool FStar_UInt64_ne(uint64_t a, uint64_t b);
 
 extern uint64_t FStar_UInt64_minus(uint64_t a);
 
@@ -974,6 +978,8 @@ extern uint32_t FStar_UInt32_zero;
 
 extern uint32_t FStar_UInt32_one;
 
+extern bool FStar_UInt32_ne(uint32_t a, uint32_t b);
+
 extern uint32_t FStar_UInt32_minus(uint32_t a);
 
 extern uint32_t FStar_UInt32_n_minus_one;
@@ -1023,6 +1029,8 @@ extern uint16_t FStar_UInt16_uint_to_t(krml_checked_int_t x);
 extern uint16_t FStar_UInt16_zero;
 
 extern uint16_t FStar_UInt16_one;
+
+extern bool FStar_UInt16_ne(uint16_t a, uint16_t b);
 
 extern uint16_t FStar_UInt16_minus(uint16_t a);
 
@@ -1074,6 +1082,8 @@ extern uint8_t FStar_UInt8_zero;
 
 extern uint8_t FStar_UInt8_one;
 
+extern bool FStar_UInt8_ne(uint8_t a, uint8_t b);
+
 extern uint8_t FStar_UInt8_minus(uint8_t a);
 
 extern uint32_t FStar_UInt8_n_minus_one;
@@ -1111,8 +1121,8 @@ extern uint8_t FStar_UInt8_of_string(Prims_string uu___);
 typedef uint8_t FStar_UInt8_byte;
 
 
-#define __FStar_UInt_8_16_32_64_H_DEFINED
-#endif
+#define FStar_UInt_8_16_32_64_H_DEFINED
+#endif /* FStar_UInt_8_16_32_64_H */
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
    Licensed under the Apache 2.0 and MIT Licenses. */
 
@@ -1300,8 +1310,8 @@ inline static uint128_t FStar_UInt128_mul32(uint64_t x, uint32_t y) {
  */
 
 
-#ifndef __internal_Hacl_Krmllib_H
-#define __internal_Hacl_Krmllib_H
+#ifndef internal_Hacl_Krmllib_H
+#define internal_Hacl_Krmllib_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -1337,8 +1347,8 @@ static inline FStar_UInt128_uint128 load128_be(uint8_t *x0);
 }
 #endif
 
-#define __internal_Hacl_Krmllib_H_DEFINED
-#endif
+#define internal_Hacl_Krmllib_H_DEFINED
+#endif /* internal_Hacl_Krmllib_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -1364,8 +1374,8 @@ static inline FStar_UInt128_uint128 load128_be(uint8_t *x0);
  */
 
 
-#ifndef __Hacl_Krmllib_H
-#define __Hacl_Krmllib_H
+#ifndef Hacl_Krmllib_H
+#define Hacl_Krmllib_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -1394,8 +1404,8 @@ static inline uint64_t FStar_UInt128_uint128_to_uint64(FStar_UInt128_uint128 a);
 }
 #endif
 
-#define __Hacl_Krmllib_H_DEFINED
-#endif
+#define Hacl_Krmllib_H_DEFINED
+#endif /* Hacl_Krmllib_H */
 #ifndef HACL_CAN_COMPILE_INTRINSICS
 /* MIT License
  *
@@ -1422,8 +1432,8 @@ static inline uint64_t FStar_UInt128_uint128_to_uint64(FStar_UInt128_uint128 a);
  */
 
 
-#ifndef __Hacl_IntTypes_Intrinsics_H
-#define __Hacl_IntTypes_Intrinsics_H
+#ifndef Hacl_IntTypes_Intrinsics_H
+#define Hacl_IntTypes_Intrinsics_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -1476,8 +1486,8 @@ Hacl_IntTypes_Intrinsics_sub_borrow_u64(uint64_t cin, uint64_t x, uint64_t y, ui
 }
 #endif
 
-#define __Hacl_IntTypes_Intrinsics_H_DEFINED
-#endif
+#define Hacl_IntTypes_Intrinsics_H_DEFINED
+#endif /* Hacl_IntTypes_Intrinsics_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -1503,8 +1513,8 @@ Hacl_IntTypes_Intrinsics_sub_borrow_u64(uint64_t cin, uint64_t x, uint64_t y, ui
  */
 
 
-#ifndef __Hacl_IntTypes_Intrinsics_128_H
-#define __Hacl_IntTypes_Intrinsics_128_H
+#ifndef Hacl_IntTypes_Intrinsics_128_H
+#define Hacl_IntTypes_Intrinsics_128_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -1543,8 +1553,8 @@ Hacl_IntTypes_Intrinsics_128_sub_borrow_u64(uint64_t cin, uint64_t x, uint64_t y
 }
 #endif
 
-#define __Hacl_IntTypes_Intrinsics_128_H_DEFINED
-#endif
+#define Hacl_IntTypes_Intrinsics_128_H_DEFINED
+#endif /* Hacl_IntTypes_Intrinsics_128_H */
 #endif
 
 
@@ -1661,8 +1671,8 @@ Hacl_IntTypes_Intrinsics_128_sub_borrow_u64(uint64_t cin, uint64_t x, uint64_t y
  */
 
 
-#ifndef __internal_Hacl_Streaming_Types_H
-#define __internal_Hacl_Streaming_Types_H
+#ifndef internal_Hacl_Streaming_Types_H
+#define internal_Hacl_Streaming_Types_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -1717,8 +1727,8 @@ Hacl_Streaming_MD_state_64;
 }
 #endif
 
-#define __internal_Hacl_Streaming_Types_H_DEFINED
-#endif
+#define internal_Hacl_Streaming_Types_H_DEFINED
+#endif /* internal_Hacl_Streaming_Types_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -1744,8 +1754,8 @@ Hacl_Streaming_MD_state_64;
  */
 
 
-#ifndef __Hacl_Streaming_Types_H
-#define __Hacl_Streaming_Types_H
+#ifndef Hacl_Streaming_Types_H
+#define Hacl_Streaming_Types_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -1786,8 +1796,8 @@ typedef struct Hacl_Streaming_MD_state_64_s Hacl_Streaming_MD_state_64;
 }
 #endif
 
-#define __Hacl_Streaming_Types_H_DEFINED
-#endif
+#define Hacl_Streaming_Types_H_DEFINED
+#endif /* Hacl_Streaming_Types_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -1813,8 +1823,8 @@ typedef struct Hacl_Streaming_MD_state_64_s Hacl_Streaming_MD_state_64;
  */
 
 
-#ifndef __internal_Hacl_Bignum_Base_H
-#define __internal_Hacl_Bignum_Base_H
+#ifndef internal_Hacl_Bignum_Base_H
+#define internal_Hacl_Bignum_Base_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -2256,8 +2266,8 @@ Hacl_Bignum_Multiplication_bn_sqr_u64(uint32_t aLen, uint64_t *a, uint64_t *res)
 }
 #endif
 
-#define __internal_Hacl_Bignum_Base_H_DEFINED
-#endif
+#define internal_Hacl_Bignum_Base_H_DEFINED
+#endif /* internal_Hacl_Bignum_Base_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -2283,8 +2293,8 @@ Hacl_Bignum_Multiplication_bn_sqr_u64(uint32_t aLen, uint64_t *a, uint64_t *res)
  */
 
 
-#ifndef __internal_Hacl_Bignum25519_51_H
-#define __internal_Hacl_Bignum25519_51_H
+#ifndef internal_Hacl_Bignum25519_51_H
+#define internal_Hacl_Bignum25519_51_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -2927,8 +2937,8 @@ Hacl_Impl_Curve25519_Field51_cswap2(uint64_t bit, uint64_t *p1, uint64_t *p2)
 }
 #endif
 
-#define __internal_Hacl_Bignum25519_51_H_DEFINED
-#endif
+#define internal_Hacl_Bignum25519_51_H_DEFINED
+#endif /* internal_Hacl_Bignum25519_51_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -2954,8 +2964,8 @@ Hacl_Impl_Curve25519_Field51_cswap2(uint64_t bit, uint64_t *p1, uint64_t *p2)
  */
 
 
-#ifndef __internal_Hacl_Curve25519_51_H
-#define __internal_Hacl_Curve25519_51_H
+#ifndef internal_Hacl_Curve25519_51_H
+#define internal_Hacl_Curve25519_51_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -2978,8 +2988,8 @@ void Hacl_Curve25519_51_finv(uint64_t *o, uint64_t *i, FStar_UInt128_uint128 *tm
 }
 #endif
 
-#define __internal_Hacl_Curve25519_51_H_DEFINED
-#endif
+#define internal_Hacl_Curve25519_51_H_DEFINED
+#endif /* internal_Hacl_Curve25519_51_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -3005,8 +3015,8 @@ void Hacl_Curve25519_51_finv(uint64_t *o, uint64_t *i, FStar_UInt128_uint128 *tm
  */
 
 
-#ifndef __Hacl_Curve25519_51_H
-#define __Hacl_Curve25519_51_H
+#ifndef Hacl_Curve25519_51_H
+#define Hacl_Curve25519_51_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -3046,8 +3056,8 @@ bool Hacl_Curve25519_51_ecdh(uint8_t *out, uint8_t *priv, uint8_t *pub);
 }
 #endif
 
-#define __Hacl_Curve25519_51_H_DEFINED
-#endif
+#define Hacl_Curve25519_51_H_DEFINED
+#endif /* Hacl_Curve25519_51_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -3073,8 +3083,8 @@ bool Hacl_Curve25519_51_ecdh(uint8_t *out, uint8_t *priv, uint8_t *pub);
  */
 
 
-#ifndef __internal_Hacl_Hash_SHA2_H
-#define __internal_Hacl_Hash_SHA2_H
+#ifndef internal_Hacl_Hash_SHA2_H
+#define internal_Hacl_Hash_SHA2_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -3207,8 +3217,8 @@ void Hacl_Hash_SHA2_sha384_finish(uint64_t *st, uint8_t *h);
 }
 #endif
 
-#define __internal_Hacl_Hash_SHA2_H_DEFINED
-#endif
+#define internal_Hacl_Hash_SHA2_H_DEFINED
+#endif /* internal_Hacl_Hash_SHA2_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -3234,8 +3244,8 @@ void Hacl_Hash_SHA2_sha384_finish(uint64_t *st, uint8_t *h);
  */
 
 
-#ifndef __Hacl_Hash_SHA2_H
-#define __Hacl_Hash_SHA2_H
+#ifndef Hacl_Hash_SHA2_H
+#define Hacl_Hash_SHA2_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -3405,8 +3415,8 @@ void Hacl_Hash_SHA2_hash_384(uint8_t *output, uint8_t *input, uint32_t input_len
 }
 #endif
 
-#define __Hacl_Hash_SHA2_H_DEFINED
-#endif
+#define Hacl_Hash_SHA2_H_DEFINED
+#endif /* Hacl_Hash_SHA2_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -3432,8 +3442,8 @@ void Hacl_Hash_SHA2_hash_384(uint8_t *output, uint8_t *input, uint32_t input_len
  */
 
 
-#ifndef __internal_Hacl_Ed25519_PrecompTable_H
-#define __internal_Hacl_Ed25519_PrecompTable_H
+#ifndef internal_Hacl_Ed25519_PrecompTable_H
+#define internal_Hacl_Ed25519_PrecompTable_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -3936,8 +3946,8 @@ Hacl_Ed25519_PrecompTable_precomp_basepoint_table_w5[640U] =
 }
 #endif
 
-#define __internal_Hacl_Ed25519_PrecompTable_H_DEFINED
-#endif
+#define internal_Hacl_Ed25519_PrecompTable_H_DEFINED
+#endif /* internal_Hacl_Ed25519_PrecompTable_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
@@ -3963,8 +3973,8 @@ Hacl_Ed25519_PrecompTable_precomp_basepoint_table_w5[640U] =
  */
 
 
-#ifndef __internal_Hacl_Ed25519_H
-#define __internal_Hacl_Ed25519_H
+#ifndef internal_Hacl_Ed25519_H
+#define internal_Hacl_Ed25519_H
 
 #if defined(__cplusplus)
 extern "C" {
@@ -4001,8 +4011,8 @@ void Hacl_Impl_Ed25519_Ladder_point_mul(uint64_t *out, uint8_t *scalar, uint64_t
 }
 #endif
 
-#define __internal_Hacl_Ed25519_H_DEFINED
-#endif
+#define internal_Hacl_Ed25519_H_DEFINED
+#endif /* internal_Hacl_Ed25519_H */
 /* MIT License
  *
  * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation

@@ -117,8 +117,40 @@ mbedtls.tar.bz2:
 	echo "$(MBEDTLSCKSUM) mbedtls.tar.bz2" | sha256sum -c
 
 mbedtls: mbedtls.tar.bz2
-	rm -rf $@
-	tar -xjf $< --strip-components=1 --one-top-level=$@
+	rm -rf $@ $@.tmp && mkdir $@.tmp
+	tar -xjf $< -C $@.tmp --strip-components=1
+	mv $@.tmp $@
+
+### DRIVER AMALGAMATION ###
+
+LUA?=lua
+HACL_URL?=https://github.com/hacl-star/hacl-star/archive/504c2987452f87fe44bce9b9f12e19d6e051761f.tar.gz
+HACL_DIR=o/hacl-star-$(basename $(basename $(notdir $(HACL_URL))))
+
+.PHONY: amalg-hacl
+amalg-hacl: test/amalg.lua | $(HACL_DIR)
+	$(LUA) test/amalg.lua hacl $(HACL_DIR) hacl.c
+
+$(HACL_DIR): | o
+	rm -rf $@.tmp && mkdir $@.tmp
+	curl -fsSL $(HACL_URL) | tar -xz -C $@.tmp --strip-components=1 \
+		--wildcards '*/dist/gcc-compatible/*' '*/dist/karamel/*'
+	mv $@.tmp $@
+
+C25519_URL?=https://www.dlbeer.co.nz/downloads/c25519-2017-10-05.zip
+C25519_MD5?=2f19396f8becb44fe1cd5e40111e3ffb
+C25519_DIR=o/$(basename $(notdir $(C25519_URL)))
+
+.PHONY: amalg-c25519
+amalg-c25519: test/amalg.lua | $(C25519_DIR)
+	$(LUA) test/amalg.lua c25519 $(C25519_DIR) c25519.c
+
+$(C25519_DIR): | o
+	curl -fsSL -o $@.zip $(C25519_URL)
+	echo "$(C25519_MD5)  $@.zip" | md5sum -c --quiet
+	rm -rf $@.tmp && unzip -q $@.zip -d $@.tmp
+	mv $@.tmp/* $@
+	rm -r $@.tmp $@.zip
 
 ###
 
@@ -128,7 +160,7 @@ tags:
 
 .PHONY: clean
 clean:
-	rm -rf o mbedtls
+	rm -rf o mbedtls mbedtls.tmp
 
 # These can be omitted
 include example/build.mk
