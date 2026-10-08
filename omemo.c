@@ -176,7 +176,7 @@ static const uint8_t *ParseVarInt(const uint8_t *s, const uint8_t *e,
   do {
     if (s >= e || i > 31)
       return NULL;
-    *v |= (*s & 0x7f) << i;
+    *v |= (uint32_t)(*s & 0x7f) << i;
     i += 7;
   } while (*s++ & 0x80);
   return s;
