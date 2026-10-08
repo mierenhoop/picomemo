@@ -1062,9 +1062,9 @@ int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
                                      const uint8_t *s, size_t n) {
   if (!d || !key || !iv || !s)
     return OMEMO_EPARAM;
-  if (keyn < 32)
+  if (keyn != 32)
     return OMEMO_ECORRUPT;
-  TRY(omemoDriverGcmDecrypt(d, key, n, iv, 12, key+16, keyn-16, s));
+  TRY(omemoDriverGcmDecrypt(d, key, n, iv, 12, key+16, 16, s));
   return 0;
 }
 
@@ -1073,9 +1073,9 @@ int omemoDecryptMessage16(uint8_t *d, const uint8_t *key,
                                      const uint8_t *s, size_t n) {
   if (!d || !key || !iv || !s)
     return OMEMO_EPARAM;
-  if (keyn < 32)
+  if (keyn != 32)
     return OMEMO_ECORRUPT;
-  TRY(omemoDriverGcmDecrypt(d, key, n, iv, 16, key+16, keyn-16, s));
+  TRY(omemoDriverGcmDecrypt(d, key, n, iv, 16, key+16, 16, s));
   return 0;
 }
 #endif

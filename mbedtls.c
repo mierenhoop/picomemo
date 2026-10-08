@@ -72,6 +72,8 @@ int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, co
     r = mbedtls_gcm_auth_decrypt(&ctx, n, iv, ivn, "", 0, tag,
                                  tagn, s, d);
   mbedtls_gcm_free(&ctx);
+  if (r == MBEDTLS_ERR_GCM_AUTH_FAILED)
+    return OMEMO_ECORRUPT;
   TRY(r);
   return 0;
 }

@@ -125,10 +125,14 @@ int omemoDriverGcmDecrypt(uint8_t *d, const uint8_t key[static 16], size_t n, co
   TRY(EVP_DecryptUpdate(ctx, d, &len, s, n));
   TRY(len == n);
   TRY(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tagn, (void*)tag));
-  TRY(EVP_DecryptFinal_ex(ctx, d + len, &len));
+  if (EVP_DecryptFinal_ex(ctx, d + len, &len) != 1) {
+    r = OMEMO_ECORRUPT;
+    goto a;
+  }
   TRY(len == 0);
   r = 0;
 a:EVP_CIPHER_CTX_free(ctx);
+  if (r) omemoDriverWipe(d, n);
 b:return r;
 }
 

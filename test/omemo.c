@@ -237,23 +237,31 @@ static void TestEncryption() {
   const uint8_t *msg = "Hello there!";
   size_t n = strlen(msg);
   uint8_t encrypted[100], decrypted[100];
-  strcpy(decrypted, msg);
   uint8_t payload[OMEMO_KEYSIZE];
 #ifdef OMEMO2
+  strcpy(decrypted, msg);
   assert(!omemoEncryptMessage(encrypted, payload, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
   assert(!omemoDecryptMessage(decrypted, &n, payload, sizeof(payload), encrypted, n+omemoGetMessagePadSize(n)));
   assert(!memcmp(msg, decrypted, n));
+  encrypted[0] ^= 1;
+  assert(omemoDecryptMessage(decrypted, &n, payload, sizeof(payload), encrypted, n+omemoGetMessagePadSize(n)) == OMEMO_ECORRUPT);
 #else
   uint8_t iv[16];
+  strcpy(decrypted, msg);
   assert(!omemoEncryptMessage(encrypted, payload, iv, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
   assert(!omemoDecryptMessage(decrypted, payload, sizeof(payload), iv, encrypted, n));
   assert(!memcmp(msg, decrypted, n));
+  encrypted[0] ^= 1;
+  assert(omemoDecryptMessage(decrypted, payload, sizeof(payload), iv, encrypted, n) == OMEMO_ECORRUPT);
+  strcpy(decrypted, msg);
   assert(!EncryptMessage16(encrypted, payload, iv, decrypted, n));
   memset(decrypted, 0, sizeof(decrypted));
   assert(!omemoDecryptMessage16(decrypted, payload, sizeof(payload), iv, encrypted, n));
   assert(!memcmp(msg, decrypted, n));
+  encrypted[0] ^= 1;
+  assert(omemoDecryptMessage16(decrypted, payload, sizeof(payload), iv, encrypted, n) == OMEMO_ECORRUPT);
 #endif
 
 #ifdef OMEMO2
