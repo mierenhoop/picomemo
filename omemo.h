@@ -216,7 +216,7 @@ OMEMO_EXPORT int omemoSetupStore(struct omemoStore *store);
 /**
  * Refill all removed prekeys in store.
  *
- * @returns 0 or OMEMO_ECRYPTO
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store);
 
@@ -225,7 +225,7 @@ OMEMO_EXPORT int omemoRefillPreKeys(struct omemoStore *store);
  *
  * Retains the previous signed prekey for one rotation.
  *
- * @returns 0 or OMEMO_ECRYPTO
+ * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoRotateSignedPreKey(struct omemoStore *store);
 
@@ -261,7 +261,7 @@ OMEMO_EXPORT void
 omemoSerializeSession(uint8_t *d, const struct omemoSession *session);
 
 /**
- * @param session must be initialized with omemoSetupSession
+ * @param session must be initialized with omemoInitiateSession()
  * @return 0 or OMEMO_EPROTOBUF
  */
 OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,
@@ -309,7 +309,7 @@ OMEMO_EXPORT int omemoDecryptKey(struct omemoSession *session,
 /**
  * Create a heartbeat message if the ratchet counter is too high.
  *
- * This function can should be called after every omemoDecryptKey(). It
+ * This function should be called after every omemoDecryptKey(). It
  * checks whether the counter is too high. When it is, it will fill
  * the omemoKeyMessage with a newly encrypted key which should be sent
  * afterwards. To check whether a heartbeat msg was made, check if
@@ -343,8 +343,6 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[48],
  * @param key (out) will contain the encryption key
  * @param n is the size of the buffer in d and s
  *
- * @see omemoEncryptMessage16() for the 16-byte IV variant
- *
  * @returns 0 or OMEMO_E*
  */
 OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
@@ -360,7 +358,8 @@ OMEMO_EXPORT int omemoEncryptMessage(uint8_t *d, uint8_t key[32],
  * @param keyn is the size of key
  * @param n is the size of the buffer in d and s
  *
- * @returns 0 or OMEMO_E*
+ * @returns 0, OMEMO_ECORRUPT when the message fails authentication or
+ * another OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
                                      const uint8_t *key, size_t keyn,
@@ -376,7 +375,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, size_t *outn,
  *
  * @see omemoDecryptMessage16() for the 16-byte IV variant
  *
- * @returns 0 or OMEMO_E*
+ * @returns 0, OMEMO_ECORRUPT when the message fails authentication or
+ * another OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[12],
@@ -385,6 +385,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
 /**
  * Decrypt message taken from the <payload> element.
  *
+ * This function exists only for compatibility with older OMEMO implementations.
+ *
  * @param key is the decrypted key of the omemoKeyMessage
  * @param keyn is the size of key, some clients might make the tag
  * larger than 16 bytes
@@ -392,7 +394,8 @@ OMEMO_EXPORT int omemoDecryptMessage(uint8_t *d, const uint8_t *key,
  *
  * @see omemoDecryptMessage() for the 12-byte IV variant
  *
- * @returns 0 or OMEMO_E*
+ * @returns 0, OMEMO_ECORRUPT when the message fails authentication or
+ * another OMEMO_E*
  */
 OMEMO_EXPORT int omemoDecryptMessage16(uint8_t *d, const uint8_t *key,
                                      size_t keyn, const uint8_t iv[16],

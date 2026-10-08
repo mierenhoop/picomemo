@@ -199,7 +199,7 @@ OMEMO2_EXPORT int omemo2SetupStore(struct omemo2Store *store);
 /**
  * Refill all removed prekeys in store.
  *
- * @returns 0 or OMEMO2_ECRYPTO
+ * @returns 0 or OMEMO2_E*
  */
 OMEMO2_EXPORT int omemo2RefillPreKeys(struct omemo2Store *store);
 
@@ -208,7 +208,7 @@ OMEMO2_EXPORT int omemo2RefillPreKeys(struct omemo2Store *store);
  *
  * Retains the previous signed prekey for one rotation.
  *
- * @returns 0 or OMEMO2_ECRYPTO
+ * @returns 0 or OMEMO2_E*
  */
 OMEMO2_EXPORT int omemo2RotateSignedPreKey(struct omemo2Store *store);
 
@@ -244,7 +244,7 @@ OMEMO2_EXPORT void
 omemo2SerializeSession(uint8_t *d, const struct omemo2Session *session);
 
 /**
- * @param session must be initialized with omemo2SetupSession
+ * @param session must be initialized with omemo2InitiateSession()
  * @return 0 or OMEMO2_EPROTOBUF
  */
 OMEMO2_EXPORT int omemo2DeserializeSession(const uint8_t *p, size_t n,
@@ -292,7 +292,7 @@ OMEMO2_EXPORT int omemo2DecryptKey(struct omemo2Session *session,
 /**
  * Create a heartbeat message if the ratchet counter is too high.
  *
- * This function can should be called after every omemo2DecryptKey(). It
+ * This function should be called after every omemo2DecryptKey(). It
  * checks whether the counter is too high. When it is, it will fill
  * the omemo2KeyMessage with a newly encrypted key which should be sent
  * afterwards. To check whether a heartbeat msg was made, check if
@@ -326,7 +326,8 @@ OMEMO2_EXPORT int omemo2EncryptMessage(uint8_t *d, uint8_t key[48],
  * @param keyn is the size of key
  * @param n is the size of the buffer in d and s
  *
- * @returns 0 or OMEMO2_E*
+ * @returns 0, OMEMO2_ECORRUPT when the message fails authentication or
+ * another OMEMO2_E*
  */
 OMEMO2_EXPORT int omemo2DecryptMessage(uint8_t *d, size_t *outn,
                                      const uint8_t *key, size_t keyn,
