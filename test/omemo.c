@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include <sys/random.h>
+#include <unistd.h>
 
 #ifdef OMEMO2
 #include "o/store2.inc"
@@ -28,13 +28,7 @@
 #endif
 
 int Random(void *d, size_t n) {
-#ifndef __EMSCRIPTEN__
-  return getrandom(d, n, 0) != n;
-#else
-  for (int i = 0; i < n; i++)
-    ((uint8_t*)d)[i] = rand();
-  return 0;
-#endif
+  return getentropy(d, n);
 }
 
 static void PrepareKey(omemoKey k) {

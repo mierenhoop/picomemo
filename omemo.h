@@ -163,9 +163,10 @@ typedef int (*omemoStoreMessageKeyCallback)(
 /**
  * Callback for cryptographically secure random number generation.
  *
- * This function is already implemented for Linux. On other systems you will
- * have to implement it yourself otherwise most functions in this library will
- * will fail by returning OMEMO_ERANDOM.
+ * This function is already implemented with getentropy() for Linux, MacOS, BSD
+ * and Emscripten. On other systems you will have to implement it yourself,
+ * otherwise most functions in this library will fail by returning
+ * OMEMO_ERANDOM.
  *
  * @param p points to the buffer that should be filled with random data
  * @param n is the amount of random bytes that `p` should be filled with

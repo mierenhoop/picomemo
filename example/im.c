@@ -28,7 +28,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/poll.h>
-#include <sys/random.h>
 #include <stdbool.h>
 
 #include "xmpp.h"
@@ -97,7 +96,7 @@ static void GenerateUuidv4(Uuidv4 dst) {
   uint8_t rnd[16];
   const char *p;
   int i, n;
-  assert(getrandom(rnd, 16, 0) == 16);
+  assert(!getentropy(rnd, 16));
   p = template;
   i = 0;
   while (*p) {
@@ -822,8 +821,8 @@ void RunIm(const char *ip) {
 
 sqlite3 *db;
 
-int Random(void *d, size_t n) { return getrandom(d, n, 0) != n; }
-int xmppRandom(void *d, size_t n) { return getrandom(d, n, 0) != n; }
+int Random(void *d, size_t n) { return getentropy(d, n); }
+int xmppRandom(void *d, size_t n) { return getentropy(d, n); }
 
 // TODO: test this
 int LoadMessageKey(struct omemoSession *, struct omemoMessageKey *sk) {

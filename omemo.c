@@ -16,8 +16,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || \
+    defined(__OpenBSD__) || defined(__NetBSD__) || defined(__EMSCRIPTEN__)
+#define HAVE_GETENTROPY
+#include <unistd.h>
+#if defined(__APPLE__)
 #include <sys/random.h>
+#endif
 #endif
 
 #include <assert.h>
@@ -113,8 +118,8 @@ int WEAK omemoStoreMessageKey(struct omemoSession *s,
 
 int WEAK omemoRandom(void *p, size_t n) {
   if (g_rndcb) return g_rndcb(p, n);
-#ifdef __linux__
-  return getrandom(p, n, 0) == n ? 0 : OMEMO_ERANDOM;
+#ifdef HAVE_GETENTROPY
+  return getentropy(p, n) ? OMEMO_ERANDOM : 0;
 #endif
   return OMEMO_ERANDOM;
 }
