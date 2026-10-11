@@ -397,8 +397,7 @@ static int GenerateSignedPreKey(struct omemo2SignedPreKey *spk,
 /****************************** STORE ********************************/
 
 static inline uint32_t IncrementWrapSkipZero(uint32_t n) {
-  n++;
-  return n + !n;
+  return n >= 0x7fffffff ? 1 : n + 1;
 }
 
 int omemo2RefillPreKeys(struct omemo2Store *store) {
@@ -799,7 +798,7 @@ static int DecryptKeyImpl(struct omemo2Session *session,
   TRY(omemoDriverAesDecrypt(kdfout->cipher, encn, kdfout->iv,
          fields[PbMsg_ciphertext].p, tmp));
   uint8_t pad = tmp[encn - 1];
-  if (pad > 16 || pad > encn || encn - pad > *keyn)
+  if (!pad || pad > 16 || pad > encn || encn - pad > *keyn)
     return OMEMO2_ECORRUPT;
   memcpy(key, tmp, encn - pad);
   *keyn = encn - pad;
@@ -886,7 +885,7 @@ int omemo2Heartbeat(struct omemo2Session *session,
                                 const struct omemo2Store *store,
                                 struct omemo2KeyMessage *msg) {
   if (!session || !store || !msg) return OMEMO2_EPARAM;
-  if (session->state.nr >= 53) {
+  if (session->state.nr > 53) {
     if (session->init == SESSION_READY) {
       uint8_t empty[32] = { 0 };
       int r = omemo2EncryptKey(session, msg, empty, 32);
@@ -920,7 +919,7 @@ int omemo2DecryptMessage(uint8_t *d, size_t *olen,
     return OMEMO2_ECORRUPT;
   TRY(omemoDriverAesDecrypt(kdfout->cipher, n, kdfout->iv, s, d));
   uint8_t p = d[n - 1];
-  if (p > n)
+  if (!p || p > 16)
     return OMEMO2_ECORRUPT;
   memset(d + n - p, 0, p);
   *olen = n - p;

@@ -261,7 +261,6 @@ OMEMO_EXPORT void
 omemoSerializeSession(uint8_t *d, const struct omemoSession *session);
 
 /**
- * @param session must be initialized with omemoInitiateSession()
  * @return 0 or OMEMO_EPROTOBUF
  */
 OMEMO_EXPORT int omemoDeserializeSession(const uint8_t *p, size_t n,
