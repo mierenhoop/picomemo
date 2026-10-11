@@ -607,6 +607,26 @@ static void TestSerialization() {
   assert(!memcmp(&tmpsession, &sessiona, sizeof(struct omemoSession)));
 }
 
+// A prekey id past 127 takes a two-byte varint, so its entry is one byte
+// longer than the ones before it.
+static void TestSerializationLongPreKeyId() {
+  struct omemoStore storea, storeb;
+  assert(!omemoSetupStore(&storea));
+  storea.prekeys[0].id = 0;
+  storea.pkcounter = 127;
+  assert(!omemoRefillPreKeys(&storea));
+  assert(storea.prekeys[0].id == 128);
+
+  size_t n = omemoGetSerializedStoreSize(&storea);
+  uint8_t *buf = malloc(n);
+  assert(buf);
+  omemoSerializeStore(buf, &storea);
+  memset(&storeb, 0, sizeof(storeb));
+  assert(!omemoDeserializeStore(buf, n, &storeb));
+  assert(!memcmp(&storea, &storeb, sizeof(struct omemoStore)));
+  free(buf);
+}
+
 static void TestSessionIntegration() {
 #ifndef __EMSCRIPTEN__
   struct omemoSession session;
@@ -677,6 +697,7 @@ int main() {
   RunTest(TestRatchet);
   RunTest(TestDeriveChainKey);
   RunTest(TestSerialization);
+  RunTest(TestSerializationLongPreKeyId);
   RunTest(TestSessionIntegration);
   RunTest(TestReceive);
   RunTest(TestSession);
