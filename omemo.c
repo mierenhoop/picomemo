@@ -748,6 +748,8 @@ int omemoInitiateSession(struct omemoSession *session,
 
 static const struct omemoPreKey *FindPreKey(const struct omemoStore *store,
                                       uint32_t pk_id) {
+  if (pk_id == 0)
+    return NULL;
   for (int i = 0; i < OMEMO_NUMPREKEYS; i++) {
     if (store->prekeys[i].id == pk_id)
       return store->prekeys + i;

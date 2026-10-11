@@ -324,8 +324,7 @@ OMEMO0_EXPORT int omemo0EncryptMessage(uint8_t *d, uint8_t key[32],
  * Decrypt message taken from the <payload> element.
  *
  * @param key is the decrypted key of the omemo0KeyMessage
- * @param keyn is the size of key, some clients might make the tag
- * larger than 16 bytes
+ * @param keyn is the size of key
  * @param n is the size of the buffer in d and s
  *
  * @see omemo0DecryptMessage16() for the 16-byte IV variant
