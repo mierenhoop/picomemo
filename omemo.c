@@ -209,7 +209,12 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
   uint32_t v;
   const uint8_t *e = s + n;
   uint32_t found = 0;
+  uint32_t fixed[16];
   ASSERT(nfields <= 16);
+  // Take the fixed sizes before parsing: a repeated field leaves its last
+  // length in .v, and the next occurrence need not match it.
+  for (int i = 0; i < nfields; i++)
+    fixed[i] = fields[i].v;
   while (s < e) {
     // This is actually a varint, but we only support id < 16 and return
     // an error otherwise, so we don't have to account for multiple-byte
@@ -223,7 +228,7 @@ static bool ParseProtobuf(const uint8_t *s, size_t n,
     if (!(s = ParseVarInt(s, e, &v)))
       return true;
     // If field is fixed size, enforce it
-    if (fields[id].v && v != fields[id].v)
+    if (fixed[id] && v != fixed[id])
       return true;
     fields[id].v = v;
     if (type == PB_LEN) {
