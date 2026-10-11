@@ -88,6 +88,8 @@ enum {
 
 #define SerLen sizeof(omemoSerializedKey)
 
+#define MAXSKIP_GUARDRAIL 1000
+
 static omemoLoadMessageKeyCallback  g_lmkcb;
 static omemoStoreMessageKeyCallback g_smkcb;
 static omemoRandomCallback          g_rndcb;
@@ -104,6 +106,8 @@ int WEAK omemoStoreMessageKey(struct omemoSession *s,
                               const struct omemoMessageKey *sk,
                               uint64_t n) {
   if (g_smkcb) return g_smkcb(s, sk, n);
+  if (n > MAXSKIP_GUARDRAIL)
+    return OMEMO_EUSER;
   return 0;
 }
 
